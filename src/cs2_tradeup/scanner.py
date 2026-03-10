@@ -781,9 +781,10 @@ def _select_optimal_materials_for_formula(
     conservative_float_mode: bool,
     scale: int = 10_000,
 ) -> _OptimizedFormulaMaterials | None:
+    # required_average_metric_max is already computed from nextafter(exterior_upper, -inf),
+    # so applying nextafter again would create a 1-unit rounding discrepancy with candidates
+    # that are capped at this exact value.
     max_average_adjusted = max(0.0, min(1.0, formula.exterior_requirement.required_average_metric_max))
-    if max_average_adjusted > 0.0:
-        max_average_adjusted = math.nextafter(max_average_adjusted, -math.inf)
     max_total_units = _metric_to_units(
         max_average_adjusted * sum(component.count for component in formula.collection_components),
         scale=scale,
@@ -1325,7 +1326,21 @@ def _resolve_material_float_selection(
         midpoint_float = _midpoint_float_for_exterior(item, exterior)
         if midpoint_float is None:
             return None
-        return midpoint_float, FLOAT_SOURCE_EXTERIOR_MIDPOINT, False, False
+        # If midpoint satisfies the metric cap, use it as a conservative estimate
+        midpoint_metric = item.wear_position(midpoint_float)
+        if midpoint_metric <= average_metric_cap:
+            return midpoint_float, FLOAT_SOURCE_EXTERIOR_MIDPOINT, False, False
+        # Midpoint exceeds cap but low-float items in this exterior may still satisfy it
+        # (e.g. buying low-float MW items on BUFF). Fall back to capped float and
+        # require float verification at purchase time.
+        capped_float = _candidate_float_for_exterior(
+            item,
+            exterior,
+            average_metric_cap=average_metric_cap,
+        )
+        if capped_float is None:
+            return None
+        return capped_float, FLOAT_SOURCE_REQUIREMENT_CAP, False, True
 
     capped_float = _candidate_float_for_exterior(
         item,

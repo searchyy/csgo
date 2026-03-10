@@ -359,21 +359,47 @@ class ScannerTests(unittest.TestCase):
             conservative_float_mode=True,
         )
 
+        # In conservative mode, FN items (midpoint 0.035) satisfy the metric cap
+        # (< 0.07/0.70 ≈ 0.1) and are priced at 2.0.  MW items have midpoint 0.11 which
+        # exceeds the cap, so conservative mode falls back to the capped float and marks
+        # them as requiring float verification (need low-float MW items on BUFF).
+        # The optimizer picks all-MW (10 × 1.0 = 10.0) over mixed FN+MW (12.0) as cheaper.
         self.assertEqual(len(results), 1)
         best = results[0]
-        self.assertAlmostEqual(best.total_cost, 12.0)
+        self.assertAlmostEqual(best.total_cost, 10.0)
         self.assertEqual(
             [(pricing.requested_exterior.value, pricing.count) for pricing in best.material_pricings],
-            [("Factory New", 2), ("Minimal Wear", 8)],
+            [("Minimal Wear", 10)],
         )
-        self.assertTrue(
-            all(pricing.float_source == "exterior_midpoint" for pricing in best.material_pricings)
+        mw_pricing = best.material_pricings[0]
+        self.assertEqual(mw_pricing.float_source, "requirement_cap")
+        self.assertTrue(mw_pricing.requires_float_verification)
+
+        # FN items still use midpoint in conservative mode (midpoint ≤ cap)
+        fn_results = find_optimal_materials(
+            "Target Gun",
+            Exterior.FACTORY_NEW,
+            catalog,
+            {
+                ("Alpha Input", "Factory New"): PriceQuote(0.5),
+                ("Alpha Input", "Minimal Wear"): PriceQuote(1.0),
+                ("Target Gun", "Factory New"): PriceQuote(100.0),
+                ("Alpha Sidearm", "Minimal Wear"): PriceQuote(10.0),
+            },
+            min_target_count=10,
+            max_target_count=10,
+            max_auxiliary_collections=0,
+            max_formulas=5,
+            conservative_float_mode=True,
         )
-        self.assertTrue(
-            all(not pricing.requires_float_verification for pricing in best.material_pricings)
-        )
-        self.assertAlmostEqual(best.material_pricings[0].min_float, 0.0, places=4)
-        self.assertAlmostEqual(best.material_pricings[0].estimated_float, 0.035, places=4)
+        self.assertEqual(len(fn_results), 1)
+        fn_best = fn_results[0]
+        self.assertAlmostEqual(fn_best.total_cost, 5.0)
+        fn_pricing = fn_best.material_pricings[0]
+        self.assertEqual(fn_pricing.requested_exterior.value, "Factory New")
+        self.assertEqual(fn_pricing.float_source, "exterior_midpoint")
+        self.assertFalse(fn_pricing.requires_float_verification)
+        self.assertAlmostEqual(fn_pricing.estimated_float, 0.035, places=4)
 
 
 if __name__ == "__main__":
