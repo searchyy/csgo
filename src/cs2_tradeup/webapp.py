@@ -32,6 +32,7 @@ from .price_crawl import (
     crawl_catalog_item_prices_to_sqlite,
 )
 from .scan_storage import TradeUpScanResultStore
+from .scheduler import CrawlScheduler
 from .steamdt_market import SteamDTPriceSnapshotStore
 from .steamdt_scan import build_steamdt_tradeup_scanner, scan_steamdt_tradeup_candidates
 from .scanner import summarize_float_validation
@@ -40,6 +41,7 @@ from .scanner import summarize_float_validation
 DEFAULT_CATALOG_PATH = Path("data") / "items.sqlite"
 DEFAULT_PRICE_SNAPSHOT_PATH = Path("data") / "steamdt_prices.sqlite"
 DEFAULT_SCAN_RESULT_PATH = Path("data") / "scan_results.sqlite"
+DEFAULT_SCHEDULER_STATE_PATH = Path("data") / "scheduler.sqlite"
 DEFAULT_CRAWL_LOG_CANDIDATES = (
     Path("output") / "full_price_resume_supervised.log",
     Path("output") / "full_price_crawl_2w.log",
@@ -151,6 +153,7 @@ def create_app(
     catalog_path: str | Path = DEFAULT_CATALOG_PATH,
     price_snapshot_path: str | Path = DEFAULT_PRICE_SNAPSHOT_PATH,
     scan_result_path: str | Path = DEFAULT_SCAN_RESULT_PATH,
+    scheduler_state_path: str | Path = DEFAULT_SCHEDULER_STATE_PATH,
     crawl_log_path: str | Path | None = None,
     crawl_worker_log_dir: str | Path | None = None,
 ) -> Flask:
@@ -160,11 +163,22 @@ def create_app(
         CATALOG_PATH=str(Path(catalog_path)),
         PRICE_SNAPSHOT_PATH=str(Path(price_snapshot_path)),
         SCAN_RESULT_PATH=str(Path(scan_result_path)),
+        SCHEDULER_STATE_PATH=str(Path(scheduler_state_path)),
         CRAWL_LOG_PATH=str(Path(crawl_log_path)) if crawl_log_path else "",
         CRAWL_WORKER_LOG_DIR=str(Path(crawl_worker_log_dir)) if crawl_worker_log_dir else "",
     )
     get_default_localization_index()
     app.job_manager = BackgroundJobManager()  # type: ignore[attr-defined]
+
+    # Start persistent crawl scheduler (reads its own config from SQLite).
+    scheduler = CrawlScheduler(app.config["SCHEDULER_STATE_PATH"])
+    scheduler.start(
+        job_manager=app.job_manager,  # type: ignore[arg-type]
+        catalog_path=app.config["CATALOG_PATH"],
+        snapshot_path=app.config["PRICE_SNAPSHOT_PATH"],
+        scan_result_path=app.config["SCAN_RESULT_PATH"],
+    )
+    app.scheduler = scheduler  # type: ignore[attr-defined]
 
     @app.after_request
     def apply_no_cache_headers(response):
@@ -742,6 +756,49 @@ def create_app(
         except KeyError:
             return jsonify({"error": "任务不存在"}), 404
         return jsonify({"job": job.to_dict()})
+
+    # ------------------------------------------------------------------
+    # Schedule endpoints
+    # ------------------------------------------------------------------
+
+    @app.get("/api/schedule")
+    def api_schedule_get():
+        """Return current scheduler state and configuration."""
+        return jsonify(app.scheduler.get_state())  # type: ignore[attr-defined]
+
+    @app.post("/api/schedule")
+    def api_schedule_configure():
+        """Configure the scheduler.
+
+        Accepted JSON fields (all optional):
+          enabled          bool   – enable or disable auto-scheduling
+          interval_hours   float  – hours between crawl+scan cycles
+          crawl_config     dict   – forwarded to crawl_catalog_item_prices_to_sqlite
+          scan_config      dict   – forwarded to scan_steamdt_tradeup_candidates
+        """
+        payload = request.get_json(silent=True) or {}
+        enabled = payload.get("enabled")
+        interval_hours = payload.get("interval_hours")
+        crawl_config = payload.get("crawl_config")
+        scan_config = payload.get("scan_config")
+
+        try:
+            app.scheduler.configure(  # type: ignore[attr-defined]
+                enabled=bool(enabled) if enabled is not None else None,
+                interval_hours=float(interval_hours) if interval_hours is not None else None,
+                crawl_config=dict(crawl_config) if crawl_config is not None else None,
+                scan_config=dict(scan_config) if scan_config is not None else None,
+            )
+        except (ValueError, TypeError) as exc:
+            return jsonify({"error": str(exc)}), 400
+
+        return jsonify({"ok": True, "state": app.scheduler.get_state()})  # type: ignore[attr-defined]
+
+    @app.post("/api/schedule/trigger")
+    def api_schedule_trigger():
+        """Immediately start a crawl+scan cycle regardless of the schedule."""
+        app.scheduler.trigger()  # type: ignore[attr-defined]
+        return jsonify({"ok": True, "message": "Cycle triggered"})
 
     return app
 
