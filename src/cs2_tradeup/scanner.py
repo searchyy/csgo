@@ -30,6 +30,12 @@ FLOAT_SOURCE_VERIFIED = "verified_listing"
 FLOAT_SOURCE_REQUIREMENT_CAP = "requirement_cap"
 FLOAT_SOURCE_EXTERIOR_MIDPOINT = "exterior_midpoint"
 
+# When the float cap restricts less than this fraction of the exterior range, the
+# cheapest listings (near the exterior's upper bound) won't satisfy the cap.  Using
+# lowest_price would silently underestimate material cost, so we downgrade to
+# FLOAT_SOURCE_REQUIREMENT_CAP and flag requires_float_verification=True instead.
+_FLOAT_CAP_USABLE_FRACTION_THRESHOLD = 0.75
+
 FLOAT_SOURCE_LABELS = {
     FLOAT_SOURCE_VERIFIED: "已验浮",
     FLOAT_SOURCE_REQUIREMENT_CAP: "需验浮",
@@ -781,9 +787,10 @@ def _select_optimal_materials_for_formula(
     conservative_float_mode: bool,
     scale: int = 10_000,
 ) -> _OptimizedFormulaMaterials | None:
+    # required_average_metric_max is already computed from nextafter(exterior_upper, -inf),
+    # so applying nextafter again would create a 1-unit rounding discrepancy with candidates
+    # that are capped at this exact value.
     max_average_adjusted = max(0.0, min(1.0, formula.exterior_requirement.required_average_metric_max))
-    if max_average_adjusted > 0.0:
-        max_average_adjusted = math.nextafter(max_average_adjusted, -math.inf)
     max_total_units = _metric_to_units(
         max_average_adjusted * sum(component.count for component in formula.collection_components),
         scale=scale,
@@ -1301,6 +1308,28 @@ def _midpoint_float_for_exterior(item: ItemDefinition, exterior: Exterior) -> fl
     return (lower + upper) / 2.0
 
 
+def _float_cap_usable_fraction(
+    item: ItemDefinition, exterior: Exterior, average_metric_cap: float
+) -> float:
+    """Return the fraction of the exterior float range that satisfies the metric cap (0–1).
+
+    For example, if the exterior runs from 0.00 to 0.07 (FN) and the cap allows floats
+    up to 0.044, only 63% of listings in that exterior are usable — the cheapest
+    listings near 0.07 are excluded, so lowest_price understates the true cost.
+    """
+    exterior_upper = _max_float_for_exterior(item, exterior)
+    if exterior_upper is None:
+        return 1.0
+    lower_bound, _ = exterior.float_bounds
+    exterior_lower = max(item.min_float, lower_bound)
+    exterior_range = exterior_upper - exterior_lower
+    if exterior_range <= 0:
+        return 1.0
+    cap_float = item.min_float + item.float_range * average_metric_cap
+    usable_range = min(cap_float, exterior_upper) - exterior_lower
+    return max(0.0, usable_range) / exterior_range
+
+
 def _resolve_material_float_selection(
     item: ItemDefinition,
     exterior: Exterior,
@@ -1325,7 +1354,26 @@ def _resolve_material_float_selection(
         midpoint_float = _midpoint_float_for_exterior(item, exterior)
         if midpoint_float is None:
             return None
-        return midpoint_float, FLOAT_SOURCE_EXTERIOR_MIDPOINT, False, False
+        midpoint_metric = item.wear_position(midpoint_float)
+        if midpoint_metric <= average_metric_cap:
+            # Only use the exterior midpoint price when the cap still covers a large
+            # enough fraction of the exterior range.  A tight cap means the cheapest
+            # listings (near exterior_max) would be excluded at purchase time, so
+            # lowest_price silently underestimates the actual material cost.
+            usable_fraction = _float_cap_usable_fraction(item, exterior, average_metric_cap)
+            if usable_fraction >= _FLOAT_CAP_USABLE_FRACTION_THRESHOLD:
+                return midpoint_float, FLOAT_SOURCE_EXTERIOR_MIDPOINT, False, False
+        # Midpoint exceeds cap, or cap is tight (cuts off too many cheap listings).
+        # Fall back to capped float and require float verification at purchase time so
+        # the caller knows the displayed price may be lower than actual market cost.
+        capped_float = _candidate_float_for_exterior(
+            item,
+            exterior,
+            average_metric_cap=average_metric_cap,
+        )
+        if capped_float is None:
+            return None
+        return capped_float, FLOAT_SOURCE_REQUIREMENT_CAP, False, True
 
     capped_float = _candidate_float_for_exterior(
         item,

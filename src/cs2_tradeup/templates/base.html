@@ -6,140 +6,222 @@
   <title>{% block title %}CS2 炼金面板{% endblock %}</title>
   <style>
     :root {
-      --bg: #0f172a;
+      --bg: #0b1120;
       --panel: #111827;
-      --panel-2: #1f2937;
-      --text: #e5e7eb;
+      --panel-2: #1e293b;
+      --text: #e2e8f0;
       --muted: #94a3b8;
-      --line: #334155;
+      --line: #1e293b;
+      --line-2: #334155;
       --accent: #22c55e;
       --accent-2: #38bdf8;
       --warn: #f59e0b;
       --danger: #ef4444;
+      --radius: 12px;
     }
-    * { box-sizing: border-box; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      margin: 0;
-      font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
-      background: linear-gradient(180deg, #0b1222 0%, #0f172a 100%);
+      font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", Arial, sans-serif;
+      background: var(--bg);
       color: var(--text);
+      min-height: 100vh;
     }
     a { color: var(--accent-2); text-decoration: none; }
+
+    /* ── Topbar ── */
     .topbar {
       position: sticky;
       top: 0;
-      z-index: 20;
+      z-index: 30;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 14px 24px;
-      background: rgba(15, 23, 42, 0.92);
+      gap: 16px;
+      padding: 0 24px;
+      height: 54px;
+      background: rgba(11, 17, 32, 0.92);
       border-bottom: 1px solid var(--line);
-      backdrop-filter: blur(10px);
+      backdrop-filter: blur(12px);
     }
-    .brand { font-size: 18px; font-weight: 700; }
-    .nav { display: flex; gap: 14px; flex-wrap: wrap; }
+    .brand { font-size: 16px; font-weight: 700; color: var(--accent-2); white-space: nowrap; }
+    .nav { display: flex; gap: 4px; flex-wrap: nowrap; overflow-x: auto; }
     .nav a {
-      padding: 8px 12px;
-      border-radius: 10px;
-      background: #132036;
-      color: #dbeafe;
+      padding: 6px 14px;
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 14px;
+      white-space: nowrap;
+      transition: background .15s, color .15s;
     }
-    .nav a.active { background: #1d4ed8; }
-    .container { max-width: 1440px; margin: 0 auto; padding: 20px 24px 40px; }
-    .hero { margin-bottom: 20px; }
-    .hero h1 { margin: 0 0 8px; font-size: 28px; }
-    .hero p { margin: 0; color: var(--muted); }
+    .nav a:hover { background: var(--panel-2); color: var(--text); }
+    .nav a.active { background: #1d4ed8; color: #fff; }
+
+    /* ── Layout ── */
+    .container { max-width: 1520px; margin: 0 auto; padding: 20px 20px 48px; }
+
+    /* ── Hero ── */
+    .hero { margin-bottom: 18px; }
+    .hero h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+    .hero p { color: var(--muted); font-size: 14px; }
+
+    /* ── Card ── */
     .card {
-      background: rgba(17, 24, 39, 0.92);
+      background: var(--panel);
       border: 1px solid var(--line);
-      border-radius: 16px;
+      border-radius: var(--radius);
       padding: 16px;
-      margin-bottom: 16px;
-      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
+      margin-bottom: 14px;
     }
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 14px;
+      color: #cbd5e1;
+    }
+
+    /* ── Toolbar / filter bar ── */
     .toolbar {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 12px;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 10px;
       align-items: end;
     }
-    label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
-    input, select, textarea, button {
+    .toolbar.wide { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+    label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 5px; letter-spacing: .02em; text-transform: uppercase; }
+
+    input, select, textarea {
       width: 100%;
-      border-radius: 10px;
-      border: 1px solid var(--line);
-      background: #0f172a;
+      border-radius: 8px;
+      border: 1px solid var(--line-2);
+      background: #0c1528;
       color: var(--text);
-      padding: 10px 12px;
-      font-size: 14px;
+      padding: 8px 10px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color .15s;
     }
-    textarea { min-height: 84px; resize: vertical; }
+    input:focus, select:focus, textarea:focus { border-color: #2563eb; }
+    textarea { min-height: 80px; resize: vertical; }
+
     button {
+      width: 100%;
+      border-radius: 8px;
+      border: none;
+      color: #fff;
+      padding: 9px 14px;
+      font-size: 13px;
+      font-weight: 600;
       cursor: pointer;
       background: linear-gradient(90deg, #2563eb 0%, #0891b2 100%);
-      border: none;
-      font-weight: 700;
+      transition: opacity .15s, transform .1s;
     }
-    button.secondary { background: #1f2937; border: 1px solid var(--line); }
+    button:hover { opacity: .88; }
+    button:active { transform: scale(.98); }
+    button.secondary { background: var(--panel-2); border: 1px solid var(--line-2); color: var(--text); }
     button.warn { background: linear-gradient(90deg, #d97706 0%, #ea580c 100%); }
+    button.danger { background: linear-gradient(90deg, #dc2626 0%, #b91c1c 100%); }
+
+    /* ── Collapsible section ── */
+    details { margin-top: 4px; }
+    details > summary {
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--muted);
+      padding: 6px 0;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      user-select: none;
+    }
+    details > summary::before {
+      content: '▸';
+      font-size: 11px;
+      transition: transform .2s;
+    }
+    details[open] > summary::before { transform: rotate(90deg); }
+
+    /* ── Stats row ── */
     .stats {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 12px;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
     }
     .stat {
-      padding: 14px;
-      border-radius: 14px;
-      background: #0f172a;
+      padding: 12px 14px;
+      border-radius: var(--radius);
+      background: var(--panel);
       border: 1px solid var(--line);
     }
-    .stat .label { color: var(--muted); font-size: 12px; }
-    .stat .value { font-size: 24px; font-weight: 700; margin-top: 6px; }
-    .table-wrap { overflow: auto; border-radius: 12px; border: 1px solid var(--line); }
-    table { width: 100%; border-collapse: collapse; min-width: 980px; }
+    .stat .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .02em; }
+    .stat .value { font-size: 22px; font-weight: 700; margin-top: 6px; line-height: 1.2; }
+
+    /* ── Table ── */
+    .table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--line); }
+    table { width: 100%; border-collapse: collapse; min-width: 960px; }
     th, td {
-      padding: 10px 12px;
-      border-bottom: 1px solid rgba(51, 65, 85, 0.55);
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--line);
       vertical-align: top;
       text-align: left;
       font-size: 13px;
+      line-height: 1.5;
     }
     th {
       position: sticky;
       top: 0;
-      background: #111827;
-      color: #cbd5e1;
-      font-size: 12px;
+      background: #0f1a2e;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: .03em;
+      letter-spacing: .04em;
+      white-space: nowrap;
     }
-    tr:hover td { background: rgba(30, 41, 59, 0.35); }
+    tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: rgba(30, 41, 59, 0.4); }
+
+    /* ── Typography helpers ── */
     .muted { color: var(--muted); }
-    .mono { font-family: Consolas, Menlo, monospace; }
-    .good { color: #22c55e; font-weight: 700; }
+    .muted-sm { color: var(--muted); font-size: 12px; }
+    .mono { font-family: Consolas, "JetBrains Mono", Menlo, monospace; font-size: 12px; }
+    .good { color: var(--accent); font-weight: 700; }
+    .very-good { color: #4ade80; font-weight: 700; }
+    .ok { color: #facc15; font-weight: 600; }
     .warn-text { color: var(--warn); }
     .danger-text { color: var(--danger); }
-    .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+    .small { font-size: 12px; }
+
+    /* ── Chips ── */
     .chip {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 4px 10px;
+      gap: 4px;
+      padding: 2px 8px;
       border-radius: 999px;
-      background: #0f172a;
-      border: 1px solid var(--line);
-      font-size: 12px;
+      border: 1px solid var(--line-2);
+      background: var(--panel-2);
+      font-size: 11px;
+      white-space: nowrap;
     }
-    .job-list { display: grid; gap: 10px; }
+    .chip.green { border-color: #166534; background: #052e16; color: var(--accent); }
+    .chip.yellow { border-color: #92400e; background: #1c1003; color: var(--warn); }
+    .chip.red { border-color: #7f1d1d; background: #1c0505; color: var(--danger); }
+    .chip.blue { border-color: #1e3a5f; background: #071428; color: var(--accent-2); }
+
+    /* ── Job / progress ── */
+    .job-list { display: grid; gap: 8px; }
     .job-item {
       border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 12px;
-      background: #0f172a;
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      background: #0c1528;
+      font-size: 13px;
     }
+    .job-item + .job-item { margin-top: 0; }
     .progress-bar {
-      height: 8px;
+      height: 6px;
       background: #0b1220;
       border-radius: 999px;
       overflow: hidden;
@@ -148,23 +230,62 @@
     .progress-bar > span {
       display: block;
       height: 100%;
-      background: linear-gradient(90deg, #22c55e 0%, #38bdf8 100%);
-      width: 0%;
+      background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 100%);
+      transition: width .4s ease;
     }
-    details summary { cursor: pointer; color: #cbd5e1; }
-    .footer-note { color: var(--muted); font-size: 12px; margin-top: 12px; }
+
+    /* ── Misc ── */
+    .footer-note {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 10px;
+    }
+    details summary { cursor: pointer; color: var(--muted); }
+    .kv {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      gap: 6px 12px;
+      font-size: 13px;
+    }
+    .kv .label { color: var(--muted); }
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #cbd5e1;
+      margin-bottom: 12px;
+    }
+
+    /* ── Loading state ── */
+    .loading-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: rgba(11,17,32,.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+    .loading-overlay.visible { display: flex; }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid var(--line-2);
+      border-top-color: var(--accent-2);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
   {% block head %}{% endblock %}
 </head>
 <body>
   <div class="topbar">
-    <div class="brand">CS2 炼金工作台</div>
-    <div class="nav">
+    <div class="brand">⚗ CS2 炼金工作台</div>
+    <nav class="nav">
       <a href="{{ url_for('prices_page') }}" class="{% if request.path == '/prices' %}active{% endif %}">价格看板</a>
       <a href="{{ url_for('crawl_progress_page') }}" class="{% if request.path == '/crawl-progress' %}active{% endif %}">抓取进度</a>
       <a href="{{ url_for('ev_page') }}" class="{% if request.path == '/ev' %}active{% endif %}">EV 排行</a>
       <a href="{{ url_for('optimizer_page') }}" class="{% if request.path == '/optimizer' %}active{% endif %}">单枪优化</a>
-    </div>
+    </nav>
   </div>
   <div class="container">
     {% block body %}{% endblock %}

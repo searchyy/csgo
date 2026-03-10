@@ -1,16 +1,28 @@
 {% extends "base.html" %}
 {% block title %}EV 排行 - CS2 炼金工作台{% endblock %}
+{% block head %}
+<style>
+  .roi-high  { color: #4ade80; font-weight: 700; }
+  .roi-mid   { color: #facc15; font-weight: 700; }
+  .roi-low   { color: var(--text); font-weight: 600; }
+  .material-list { display: grid; gap: 4px; }
+  .material-row { font-size: 12px; line-height: 1.5; }
+  .outcome-list { display: grid; gap: 4px; }
+  .outcome-row { font-size: 12px; line-height: 1.5; }
+</style>
+{% endblock %}
 {% block body %}
 <div class="hero">
-  <h1>全部枪械饰品炼金 EV 排行</h1>
-  <p>扫描结果会落到本地 SQLite，前端页面只读取数据库中的结果进行排序和筛选。</p>
+  <h1>全量炼金 EV 排行</h1>
+  <p>扫描结果落库后按 ROI 从高到低展示，可发起后台扫描刷新数据。</p>
 </div>
 
+<!-- Filter bar -->
 <div class="card">
-  <div class="toolbar">
+  <div class="toolbar wide">
     <div>
       <label>搜索</label>
-      <input id="search" placeholder="输入目标枪、系列、配方签名" />
+      <input id="search" placeholder="目标枪 / 系列 / 配方签名" />
     </div>
     <div>
       <label>最小 ROI</label>
@@ -18,21 +30,15 @@
     </div>
     <div>
       <label>目标系列</label>
-      <select id="target-collection">
-        <option value="">全部</option>
-      </select>
+      <select id="target-collection"><option value="">全部</option></select>
     </div>
     <div>
       <label>目标稀有度</label>
-      <select id="target-rarity-name">
-        <option value="">全部</option>
-      </select>
+      <select id="target-rarity-name"><option value="">全部</option></select>
     </div>
     <div>
       <label>目标外观</label>
-      <select id="target-exterior">
-        <option value="">全部</option>
-      </select>
+      <select id="target-exterior"><option value="">全部</option></select>
     </div>
     <div>
       <label>最小 EV</label>
@@ -43,38 +49,32 @@
       <input id="max-total-cost" type="number" step="0.01" placeholder="可选" />
     </div>
     <div>
-      <label>排序字段</label>
-      <select id="sort-by">
-        <option value="roi">按 ROI</option>
-        <option value="expected_profit">按 EV</option>
-        <option value="total_cost">按成本</option>
-        <option value="target_probability">按目标概率</option>
-        <option value="created_at">按结果时间</option>
-        <option value="target_item">按目标名称</option>
-      </select>
+      <label>排序 / 方向</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+        <select id="sort-by">
+          <option value="roi">ROI</option>
+          <option value="expected_profit">EV</option>
+          <option value="total_cost">成本</option>
+          <option value="target_probability">目标概率</option>
+          <option value="created_at">结果时间</option>
+          <option value="target_item">名称</option>
+        </select>
+        <select id="sort-dir">
+          <option value="desc" selected>降序</option>
+          <option value="asc">升序</option>
+        </select>
+      </div>
     </div>
     <div>
-      <label>方向</label>
-      <select id="sort-dir">
-        <option value="desc" selected>降序</option>
-        <option value="asc">升序</option>
-      </select>
-    </div>
-    <div>
-      <label>显示条数</label>
-      <select id="limit">
-        <option value="50">50</option>
-        <option value="100" selected>100</option>
-        <option value="200">200</option>
-      </select>
-    </div>
-    <div>
-      <label>指定 Run ID（可选）</label>
-      <input id="run-id" type="number" min="1" placeholder="留空看全部结果" />
-    </div>
-    <div>
-      <label>刷新结果</label>
-      <button id="btn-refresh">加载 EV 排行</button>
+      <label>条数 / Run ID</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+        <select id="limit">
+          <option value="50">50</option>
+          <option value="100" selected>100</option>
+          <option value="200">200</option>
+        </select>
+        <input id="run-id" type="number" min="1" placeholder="最新" />
+      </div>
     </div>
     <div>
       <label>自动刷新</label>
@@ -86,71 +86,85 @@
         <option value="60000">60 秒</option>
       </select>
     </div>
+    <div>
+      <label>操作</label>
+      <button id="btn-refresh">加载 EV 排行</button>
+    </div>
   </div>
   <div class="footer-note" id="live-status">自动刷新已关闭</div>
 </div>
 
+<!-- Stats -->
 <div class="stats">
   <div class="stat"><div class="label">结果条数</div><div class="value" id="stat-count">-</div></div>
-  <div class="stat"><div class="label">最高 ROI</div><div class="value" id="stat-best-roi">-</div></div>
-  <div class="stat"><div class="label">最高 EV</div><div class="value" id="stat-best-ev">-</div></div>
-  <div class="stat"><div class="label">最近 Run</div><div class="value" id="stat-run">-</div></div>
+  <div class="stat"><div class="label">最高 ROI</div><div class="value good" id="stat-best-roi">-</div></div>
+  <div class="stat"><div class="label">最高 EV</div><div class="value good" id="stat-best-ev">-</div></div>
+  <div class="stat"><div class="label">当前 Run</div><div class="value" id="stat-run">-</div></div>
 </div>
 
+<!-- Scan task (collapsible) -->
 <div class="card">
-  <div class="toolbar">
-    <div>
-      <label>扫描指定枪名（可选，多行或逗号分隔）</label>
-      <textarea id="scan-items" placeholder="留空表示从当前缓存中自动挑选目标做 EV 扫描"></textarea>
+  <details id="scan-panel">
+    <summary>▸ 发起 EV 扫描（点击展开）</summary>
+    <div style="margin-top:14px;">
+      <div class="toolbar wide">
+        <div>
+          <label>扫描指定枪名（可选）</label>
+          <textarea id="scan-items" placeholder="留空自动从缓存挑选目标，多行或逗号分隔"></textarea>
+        </div>
+        <div>
+          <label>每目标最多公式数</label>
+          <input id="formula-limit" type="number" min="1" value="25" />
+        </div>
+        <div>
+          <label>最大目标数量</label>
+          <input id="max-targets" type="number" min="1" placeholder="不限" />
+        </div>
+        <div>
+          <label>仅用缓存</label>
+          <select id="cache-only">
+            <option value="false" selected>否（缓存优先，缺失补抓）</option>
+            <option value="true">是（只读 SQLite）</option>
+          </select>
+        </div>
+        <div>
+          <label>浮动策略</label>
+          <select id="conservative-float-mode">
+            <option value="true" selected>保守估算（默认）</option>
+            <option value="false">精确验浮模式</option>
+          </select>
+        </div>
+        <div>
+          <label>发起扫描</label>
+          <button id="btn-start-scan" class="warn">开始 EV 扫描</button>
+        </div>
+      </div>
     </div>
-    <div>
-      <label>每个目标最多公式数</label>
-      <input id="formula-limit" type="number" min="1" value="25" />
-    </div>
-    <div>
-      <label>最大目标数量</label>
-      <input id="max-targets" type="number" min="1" placeholder="留空表示不限制" />
-    </div>
-  <div>
-      <label>仅用缓存</label>
-      <select id="cache-only">
-        <option value="false" selected>否，缓存优先缺失补抓</option>
-        <option value="true">是，只读 SQLite</option>
-      </select>
-    </div>
-    <div>
-      <label>浮动策略</label>
-      <select id="conservative-float-mode">
-        <option value="true" selected>保守估算（默认）</option>
-        <option value="false">需验浮模式</option>
-      </select>
-    </div>
-    <div>
-      <label>后台任务</label>
-      <button id="btn-start-scan" class="warn">开始 EV 扫描</button>
-    </div>
+  </details>
+</div>
+
+<!-- Recent scan runs & jobs -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+  <div class="card" style="margin-bottom:0;">
+    <div class="section-title">最近后台任务</div>
+    <div class="job-list" id="jobs"><div class="muted">暂无 EV 扫描任务</div></div>
+  </div>
+  <div class="card" style="margin-bottom:0;">
+    <div class="section-title">扫描 Run 记录</div>
+    <div class="job-list" id="runs"><div class="muted">暂无扫描 Run</div></div>
   </div>
 </div>
 
-<div class="card">
-  <h3 style="margin-top:0;">最近扫描任务</h3>
-  <div class="job-list" id="jobs"></div>
-</div>
-
-<div class="card">
-  <h3 style="margin-top:0;">最近扫描 Run</h3>
-  <div class="job-list" id="runs"></div>
-</div>
-
+<!-- Results table -->
 <div class="card">
   <div class="table-wrap">
     <table>
       <thead>
         <tr>
           <th>目标枪械</th>
-          <th>浮动状态</th>
+          <th>浮动</th>
           <th>ROI</th>
-          <th>EV</th>
+          <th>EV（利润）</th>
           <th>成本</th>
           <th>目标概率</th>
           <th>配方签名</th>
@@ -173,33 +187,40 @@
 
   function fmtPrice(value) {
     if (value === null || value === undefined) return '-';
-    return Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    return '¥' + Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  }
+
+  function fmtPct(value) {
+    return (Number(value) * 100).toFixed(2) + '%';
+  }
+
+  function fmtDate(value) {
+    if (!value) return '-';
+    return String(value).replace('T', ' ').slice(0, 16);
+  }
+
+  function roiClass(roi) {
+    if (Number(roi) >= 2.0) return 'roi-high';
+    if (Number(roi) >= 1.5) return 'roi-mid';
+    return 'roi-low';
   }
 
   function splitItemNames(raw) {
-    return raw
-      .split(/\n|,/g)
-      .map((v) => v.trim())
-      .filter(Boolean);
+    return raw.split(/\n|,/g).map((v) => v.trim()).filter(Boolean);
   }
 
-  async function fetchJsonNoCache(url, options = {}) {
+  async function fetchJson(url, options = {}) {
     const response = await fetch(url, {
-      cache: 'no-store',
-      ...options,
-      headers: {
-        'Cache-Control': 'no-cache',
-        ...(options.headers || {}),
-      },
+      cache: 'no-store', ...options,
+      headers: { 'Cache-Control': 'no-cache', ...(options.headers || {}) },
     });
     return response.json();
   }
 
   function updateLiveStatus(message = '') {
     const interval = Number(document.getElementById('auto-refresh').value || 0);
-    const mode = interval > 0 ? `自动刷新：${interval / 1000} 秒` : '自动刷新已关闭';
-    const suffix = message ? ` / ${message}` : '';
-    liveStatusEl.textContent = `${mode}${suffix}`;
+    const mode = interval > 0 ? `自动刷新 ${interval / 1000}s` : '自动刷新已关闭';
+    liveStatusEl.textContent = message ? `${mode} · ${message}` : mode;
   }
 
   async function loadResults() {
@@ -220,10 +241,9 @@
     const runId = document.getElementById('run-id').value;
     if (runId) params.set('run_id', runId);
     try {
-      const data = await fetchJsonNoCache(`/api/ev/results?${params.toString()}`);
-      const rows = data.rows || [];
-      renderResults(rows);
-      updateLiveStatus(`上次刷新：${new Date().toLocaleTimeString('zh-CN')}`);
+      const data = await fetchJson(`/api/ev/results?${params}`);
+      renderResults(data.rows || []);
+      updateLiveStatus(`上次刷新 ${new Date().toLocaleTimeString('zh-CN')}`);
     } finally {
       evRefreshInFlight = false;
     }
@@ -231,66 +251,95 @@
 
   function renderResults(rows) {
     resultEl.innerHTML = rows.map((row) => {
-      const materials = (row.materials || []).map((entry) =>
-        `<div>${entry.item_name_zh} x${entry.count} / ${entry.requested_exterior_zh} / ${fmtPrice(entry.unit_price)}<div class="muted">Float 区间 ${Number(entry.min_float || 0).toFixed(5)} ~ ${Number(entry.max_float || 0).toFixed(5)} / 估算 ${Number((entry.estimated_float ?? entry.max_float) || 0).toFixed(5)} / ${entry.float_source_label || '-'}</div></div>`
-      ).join('');
-      const outcomes = (row.outcomes || []).map((entry) =>
-        `<div>${entry.item_name_zh} / p=${(Number(entry.probability) * 100).toFixed(2)}% / ${fmtPrice(entry.market_price)}</div>`
-      ).join('');
+      const cls = roiClass(row.roi);
+      const materials = (row.materials || []).map((e) => `
+        <div class="material-row">
+          <span style="font-weight:600;">${e.item_name_zh}</span>
+          <span class="muted"> ×${e.count}</span>
+          <span class="chip" style="margin-left:4px;">${e.requested_exterior_zh}</span>
+          <div class="muted-sm">≤ ${Number(e.max_float || 0).toFixed(5)} · ${fmtPrice(e.unit_price)} · <span style="opacity:.7;">${e.float_source_label || e.float_source || '-'}</span></div>
+        </div>`).join('');
+      const outcomes = (row.outcomes || []).map((e) => `
+        <div class="outcome-row">
+          <span>${e.item_name_zh}</span>
+          <span class="muted"> ${fmtPct(e.probability)}</span>
+          <span class="good" style="margin-left:4px;">${fmtPrice(e.market_price)}</span>
+        </div>`).join('');
+      const floatChip = row.float_validation_status_zh
+        ? `<span class="chip ${row.requires_float_verification ? 'yellow' : 'green'}">${row.float_validation_status_zh}</span>`
+        : '-';
       return `
         <tr>
           <td>
-            <div>${row.target_item_zh}</div>
-            <div class="muted">${row.target_exterior_zh} / ${row.target_collection_zh}</div>
+            <div style="font-weight:600;">${row.target_item_zh}</div>
+            <div class="muted-sm">${row.target_exterior_zh} · ${row.target_collection_zh}</div>
           </td>
-          <td><span class="chip">${row.float_validation_status_zh || '-'}</span></td>
-          <td class="good">${row.roi_percent.toFixed(2)}%</td>
-          <td class="good">${fmtPrice(row.expected_profit)}</td>
+          <td>${floatChip}</td>
+          <td class="${cls}">${fmtPct(row.roi - 1)}</td>
+          <td class="${cls}">${fmtPrice(row.expected_profit)}</td>
           <td>${fmtPrice(row.total_cost)}</td>
-          <td>${(Number(row.target_probability) * 100).toFixed(2)}%</td>
-          <td class="mono">${row.formula_signature}</td>
-          <td>${materials}</td>
-          <td>${outcomes}</td>
-        </tr>
-      `;
-    }).join('') || '<tr><td colspan="9" style="text-align:center;" class="muted">暂无扫描结果，请先发起 EV 扫描</td></tr>';
+          <td class="muted">${fmtPct(row.target_probability)}</td>
+          <td class="mono small">${row.formula_signature}</td>
+          <td><div class="material-list">${materials}</div></td>
+          <td><div class="outcome-list">${outcomes}</div></td>
+        </tr>`;
+    }).join('') || '<tr><td colspan="9" class="muted" style="text-align:center;padding:24px;">暂无扫描结果，请先发起 EV 扫描</td></tr>';
 
-    document.getElementById('stat-count').textContent = rows.length;
-    document.getElementById('stat-best-roi').textContent = rows.length ? `${rows[0].roi_percent.toFixed(2)}%` : '-';
-    document.getElementById('stat-best-ev').textContent = rows.length ? fmtPrice(Math.max(...rows.map((row) => Number(row.expected_profit)))) : '-';
-    document.getElementById('stat-run').textContent = rows.length ? rows[0].run_id : '-';
+    const count = rows.length;
+    document.getElementById('stat-count').textContent = count;
+    document.getElementById('stat-best-roi').textContent = count ? fmtPct(rows[0].roi - 1) : '-';
+    document.getElementById('stat-best-ev').textContent = count
+      ? fmtPrice(Math.max(...rows.map((r) => Number(r.expected_profit)))) : '-';
+    document.getElementById('stat-run').textContent = count ? `Run #${rows[0].run_id}` : '-';
   }
 
   async function loadRuns() {
-    const data = await fetchJsonNoCache('/api/ev/runs?limit=10');
+    const data = await fetchJson('/api/ev/runs?limit=8');
     const rows = data.rows || [];
-    runsEl.innerHTML = rows.map((row) => `
-      <div class="job-item">
-        <div><strong>Run #${row.id}</strong> <span class="chip">${row.run_type}</span> <span class="chip">${row.status}</span></div>
-        <div class="muted">创建时间：${row.created_at}</div>
-        <div class="muted">摘要：${JSON.stringify(row.summary || {})}</div>
-      </div>
-    `).join('') || '<div class="muted">暂无扫描 Run</div>';
+    runsEl.innerHTML = rows.map((row) => {
+      const statusChip = row.status === 'completed'
+        ? '<span class="chip green">完成</span>'
+        : row.status === 'failed'
+        ? '<span class="chip red">失败</span>'
+        : '<span class="chip blue">运行中</span>';
+      const summary = row.summary || {};
+      return `
+        <div class="job-item">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <strong>Run #${row.id}</strong>
+            <span class="chip">${row.run_type}</span>${statusChip}
+          </div>
+          <div class="muted-sm" style="margin-top:4px;">${fmtDate(row.created_at)}</div>
+          ${summary.results_found !== undefined
+            ? `<div class="muted-sm">扫描 ${summary.targets_scanned || '-'} 目标 · 找到 ${summary.results_found} 条结果</div>`
+            : ''}
+        </div>`;
+    }).join('') || '<div class="muted">暂无扫描 Run</div>';
   }
 
   async function loadJobs() {
-    const data = await fetchJsonNoCache('/api/tasks?limit=8');
-    const rows = (data.rows || []).filter((row) => row.job_type === 'scan_ev');
+    const data = await fetchJson('/api/tasks?limit=8');
+    const rows = (data.rows || []).filter((r) => r.job_type === 'scan_ev');
     jobsEl.innerHTML = rows.map((job) => {
       const total = Number(job.progress_total || 0);
       const current = Number(job.progress_current || 0);
-      const percent = total > 0 ? Math.max(0, Math.min(100, (current / total) * 100)) : 0;
+      const percent = total > 0 ? Math.min(100, (current / total) * 100) : 0;
+      const statusChip = job.status === 'completed'
+        ? '<span class="chip green">完成</span>'
+        : job.status === 'failed'
+        ? '<span class="chip red">失败</span>'
+        : '<span class="chip blue">运行中</span>';
       return `
         <div class="job-item">
-          <div><strong>${job.title}</strong> <span class="chip">${job.status}</span></div>
-          <div class="muted">${job.progress_message || ''}</div>
-          <div class="muted">进度：${current}/${total || '-'}</div>
-          <div class="progress-bar"><span style="width:${percent}%;"></span></div>
-          <div class="muted">关联 Run：${job.metadata?.run_id ?? '-'}</div>
-          ${job.error_message ? `<div class="danger-text">${job.error_message}</div>` : ''}
-        </div>
-      `;
-    }).join('') || '<div class="muted">暂无 EV 后台任务</div>';
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <strong>${job.title}</strong>${statusChip}
+          </div>
+          <div class="muted-sm" style="margin-top:4px;">${job.progress_message || ''}</div>
+          <div class="progress-bar"><span style="width:${percent.toFixed(1)}%;"></span></div>
+          <div class="muted-sm" style="margin-top:4px;">进度 ${current} / ${total || '-'} · Run #${job.metadata?.run_id ?? '-'}</div>
+          ${job.error_message ? `<div class="danger-text" style="margin-top:4px;">${job.error_message}</div>` : ''}
+        </div>`;
+    }).join('') || '<div class="muted">暂无 EV 扫描任务</div>';
   }
 
   async function startScan() {
@@ -308,17 +357,16 @@
       body: JSON.stringify(payload),
       cache: 'no-store',
     });
-    await refreshEvDashboard();
+    await refreshAll();
   }
 
   async function loadMeta() {
-    const data = await fetchJsonNoCache('/api/meta/options');
-    const map = [
+    const data = await fetchJson('/api/meta/options');
+    for (const [id, rows] of [
       ['target-collection', data.collections || []],
       ['target-rarity-name', data.rarities || []],
       ['target-exterior', data.exteriors || []],
-    ];
-    for (const [id, rows] of map) {
+    ]) {
       const el = document.getElementById(id);
       const first = el.querySelector('option');
       el.innerHTML = first ? first.outerHTML : '<option value="">全部</option>';
@@ -331,40 +379,30 @@
     }
   }
 
-  async function refreshEvDashboard() {
+  async function refreshAll() {
     await Promise.all([loadResults(), loadRuns(), loadJobs()]);
   }
 
-  function syncEvAutoRefresh() {
-    if (evRefreshTimer) {
-      clearInterval(evRefreshTimer);
-      evRefreshTimer = null;
-    }
+  function syncAutoRefresh() {
+    if (evRefreshTimer) { clearInterval(evRefreshTimer); evRefreshTimer = null; }
     const interval = Number(document.getElementById('auto-refresh').value || 0);
     updateLiveStatus();
     if (interval > 0) {
-      evRefreshTimer = setInterval(() => {
-        if (!document.hidden) {
-          refreshEvDashboard();
-        }
-      }, interval);
+      evRefreshTimer = setInterval(() => { if (!document.hidden) refreshAll(); }, interval);
     }
   }
 
-  document.getElementById('btn-refresh').addEventListener('click', refreshEvDashboard);
+  document.getElementById('btn-refresh').addEventListener('click', refreshAll);
   document.getElementById('btn-start-scan').addEventListener('click', startScan);
-  document.getElementById('auto-refresh').addEventListener('change', syncEvAutoRefresh);
-  ['search', 'min-roi', 'min-expected-profit', 'max-total-cost', 'target-collection', 'target-rarity-name', 'target-exterior', 'sort-by', 'sort-dir', 'limit', 'run-id'].forEach((id) => {
-    document.getElementById(id).addEventListener('change', loadResults);
-    document.getElementById(id).addEventListener('input', loadResults);
+  document.getElementById('auto-refresh').addEventListener('change', syncAutoRefresh);
+  ['search','min-roi','min-expected-profit','max-total-cost','target-collection','target-rarity-name','target-exterior','sort-by','sort-dir','limit','run-id'].forEach((id) => {
+    const el = document.getElementById(id);
+    el.addEventListener('change', loadResults);
+    if (el.tagName === 'INPUT') el.addEventListener('input', loadResults);
   });
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) {
-      refreshEvDashboard();
-    }
-  });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshAll(); });
 
-  loadMeta().then(refreshEvDashboard);
-  syncEvAutoRefresh();
+  loadMeta().then(refreshAll);
+  syncAutoRefresh();
 </script>
 {% endblock %}
