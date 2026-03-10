@@ -204,6 +204,7 @@
 
 <script>
   let refreshTimer = null;
+  let refreshAbortCtrl = null;
 
   function fmtInt(value) {
     if (value === null || value === undefined) return '-';
@@ -237,8 +238,12 @@
     });
   }
 
-  async function fetchJson(url) {
-    const r = await fetch(url, { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } });
+  async function fetchJson(url, options = {}) {
+    const r = await fetch(url, {
+      cache: 'no-store',
+      ...options,
+      headers: { 'Cache-Control': 'no-cache', ...(options.headers || {}) },
+    });
     return r.json();
   }
 
@@ -293,14 +298,11 @@
   }
 
   function renderRows(rows, total, limit, offset) {
-    const tbody = document.getElementById('gap-rows');
     document.getElementById('table-summary').textContent =
       `展示 ${fmtInt(rows.length)} / ${fmtInt(total)} 条`;
-    if (!rows || rows.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="9" class="muted" style="text-align:center;padding:20px;">暂无缺口记录</td></tr>';
-      return;
-    }
-    tbody.innerHTML = rows.map((row) => `
+    const html = (!rows || rows.length === 0)
+      ? '<tr><td colspan="9" class="muted" style="text-align:center;padding:20px;">暂无缺口记录</td></tr>'
+      : rows.map((row) => `
       <tr>
         <td>
           <div style="font-weight:600;">${esc(row.item_name_zh || row.item_name)}</div>
@@ -318,10 +320,13 @@
         <td class="muted-sm">${fmtDate(row.latest_fetched_at)}</td>
         <td>${(row.available_exteriors_zh || []).map((v) => `<span class="chip">${esc(v)}</span>`).join(' ')}</td>
       </tr>`).join('');
+    requestAnimationFrame(() => {
+      document.getElementById('gap-rows').innerHTML = html;
+    });
   }
 
-  async function loadTasks() {
-    const data = await fetchJson('/api/tasks?limit=6');
+  async function loadTasks(signal) {
+    const data = await fetchJson('/api/tasks?limit=6', signal ? { signal } : {});
     const rows = data.rows || [];
     const el = document.getElementById('task-progress-list');
     if (!rows.length) { el.innerHTML = '<div class="muted">暂无后台任务</div>'; return; }
@@ -347,15 +352,24 @@
   }
 
   async function refreshProgress() {
+    if (refreshAbortCtrl) refreshAbortCtrl.abort();
+    refreshAbortCtrl = new AbortController();
+    const { signal } = refreshAbortCtrl;
     const params = collectParams();
-    const [data] = await Promise.all([
-      fetchJson(`/api/crawl/progress?${params}`),
-      loadTasks(),
-    ]);
-    renderSummary(data.summary || {});
-    renderRun(data.run || {});
-    renderWorkers(data.workers || []);
-    renderRows(data.rows || [], data.total || 0, data.limit || 0, data.offset || 0);
+    try {
+      const [data] = await Promise.all([
+        fetchJson(`/api/crawl/progress?${params}`, { signal }),
+        loadTasks(signal),
+      ]);
+      renderSummary(data.summary || {});
+      renderRun(data.run || {});
+      renderWorkers(data.workers || []);
+      renderRows(data.rows || [], data.total || 0, data.limit || 0, data.offset || 0);
+    } catch (e) {
+      if (e.name !== 'AbortError') throw e;
+    } finally {
+      refreshAbortCtrl = null;
+    }
   }
 
   function bindAutoRefresh() {

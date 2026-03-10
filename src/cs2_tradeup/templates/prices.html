@@ -141,7 +141,7 @@
   const rowsEl = document.getElementById('rows');
   const liveStatusEl = document.getElementById('live-status');
   let pricesRefreshTimer = null;
-  let pricesRefreshInFlight = false;
+  let pricesAbortCtrl = null;
 
   function fmtPrice(value) {
     if (value === null || value === undefined || Number(value) === 0) return '-';
@@ -176,8 +176,9 @@
   }
 
   async function loadPrices() {
-    if (pricesRefreshInFlight) return;
-    pricesRefreshInFlight = true;
+    if (pricesAbortCtrl) pricesAbortCtrl.abort();
+    pricesAbortCtrl = new AbortController();
+    const { signal } = pricesAbortCtrl;
     const params = new URLSearchParams({
       search: document.getElementById('search').value,
       variant: document.getElementById('variant').value,
@@ -193,11 +194,13 @@
       limit: document.getElementById('limit').value,
     });
     try {
-      const data = await fetchJson(`/api/prices?${params}`);
+      const data = await fetchJson(`/api/prices?${params}`, { signal });
       renderPrices(data.rows || []);
       updateLiveStatus(`上次刷新 ${new Date().toLocaleTimeString('zh-CN')}`);
+    } catch (e) {
+      if (e.name !== 'AbortError') throw e;
     } finally {
-      pricesRefreshInFlight = false;
+      pricesAbortCtrl = null;
     }
   }
 
@@ -230,15 +233,19 @@
           <td class="muted-sm">${fmtDate(row.fetched_at)}</td>
         </tr>`;
     }).join('');
-    rowsEl.innerHTML = html || '<tr><td colspan="9" class="muted" style="text-align:center;padding:24px;">暂无价格数据</td></tr>';
 
     const priced = rows.filter((r) => Number((r.safe_price ?? r.lowest_price) || 0) > 0);
-    document.getElementById('stat-rows').textContent = rows.length;
-    document.getElementById('stat-priced').textContent = priced.length;
-    document.getElementById('stat-min-price').textContent = priced.length
-      ? fmtPrice(Math.min(...priced.map((r) => Number(r.safe_price ?? r.lowest_price)))) : '-';
-    document.getElementById('stat-max-price').textContent = priced.length
-      ? fmtPrice(Math.max(...priced.map((r) => Number(r.safe_price ?? r.lowest_price)))) : '-';
+    const vals = priced.map((r) => Number(r.safe_price ?? r.lowest_price));
+    const minP = vals.length ? vals.reduce((a, b) => Math.min(a, b)) : null;
+    const maxP = vals.length ? vals.reduce((a, b) => Math.max(a, b)) : null;
+
+    requestAnimationFrame(() => {
+      rowsEl.innerHTML = html || '<tr><td colspan="9" class="muted" style="text-align:center;padding:24px;">暂无价格数据</td></tr>';
+      document.getElementById('stat-rows').textContent = rows.length;
+      document.getElementById('stat-priced').textContent = priced.length;
+      document.getElementById('stat-min-price').textContent = minP !== null ? fmtPrice(minP) : '-';
+      document.getElementById('stat-max-price').textContent = maxP !== null ? fmtPrice(maxP) : '-';
+    });
   }
 
   async function loadMeta() {
@@ -249,14 +256,8 @@
       ['platform', data.platforms || []],
     ]) {
       const el = document.getElementById(id);
-      const first = el.querySelector('option');
-      el.innerHTML = first ? first.outerHTML : '<option value="">全部</option>';
-      for (const row of rows) {
-        const opt = document.createElement('option');
-        opt.value = row.value;
-        opt.textContent = row.label;
-        el.appendChild(opt);
-      }
+      el.innerHTML = '<option value="">全部</option>' +
+        rows.map((r) => `<option value="${r.value}">${r.label}</option>`).join('');
     }
   }
 
