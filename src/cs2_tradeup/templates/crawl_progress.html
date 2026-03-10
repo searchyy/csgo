@@ -1,0 +1,314 @@
+{% extends "base.html" %}
+{% block title %}抓取进度 - CS2 炼金工作台{% endblock %}
+{% block head %}
+<style>
+  .worker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 12px;
+  }
+  .worker-card {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: #0f172a;
+    padding: 14px;
+  }
+  .kv {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 8px 12px;
+    font-size: 13px;
+  }
+  .kv .label {
+    color: var(--muted);
+  }
+  .tail-box {
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 10px;
+    background: #0b1220;
+    border: 1px solid var(--line);
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .toolbar.compact {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+  .table-wrap table {
+    min-width: 1100px;
+  }
+</style>
+{% endblock %}
+{% block body %}
+<div class="hero">
+  <h1>价格抓取进度看板</h1>
+  <p>实时查看全量价格库抓取进度、缺口饰品、最近增量以及各个浏览器 Worker 的运行状态。</p>
+</div>
+
+<div class="card">
+  <div class="toolbar compact">
+    <div>
+      <label>搜索饰品 / 收藏品</label>
+      <input id="search" placeholder="支持中文 / 英文关键词" />
+    </div>
+    <div>
+      <label>状态</label>
+      <select id="status">
+        <option value="incomplete" selected>仅看未补齐</option>
+        <option value="all">全部</option>
+        <option value="complete">仅看已补齐</option>
+      </select>
+    </div>
+    <div>
+      <label>排序字段</label>
+      <select id="sort-by">
+        <option value="missing_slots" selected>缺口槽位</option>
+        <option value="completion_ratio">完成比例</option>
+        <option value="cached_slots">已缓存槽位</option>
+        <option value="expected_slots">应有槽位</option>
+        <option value="latest">最近抓取</option>
+        <option value="item">饰品名称</option>
+        <option value="collection">收藏品</option>
+        <option value="rarity">稀有度</option>
+      </select>
+    </div>
+    <div>
+      <label>排序方向</label>
+      <select id="sort-dir">
+        <option value="desc" selected>降序</option>
+        <option value="asc">升序</option>
+      </select>
+    </div>
+    <div>
+      <label>每页数量</label>
+      <select id="limit">
+        <option value="20">20</option>
+        <option value="50" selected>50</option>
+        <option value="100">100</option>
+        <option value="200">200</option>
+      </select>
+    </div>
+    <div>
+      <label>自动刷新</label>
+      <select id="auto-refresh">
+        <option value="15" selected>15 秒</option>
+        <option value="30">30 秒</option>
+        <option value="60">60 秒</option>
+        <option value="0">关闭</option>
+      </select>
+    </div>
+    <div>
+      <label>刷新数据</label>
+      <button id="btn-refresh">立即刷新</button>
+    </div>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="label">饰品家族总数</div><div class="value" id="stat-total-families">-</div></div>
+  <div class="stat"><div class="label">已补齐家族</div><div class="value good" id="stat-complete-families">-</div></div>
+  <div class="stat"><div class="label">未补齐家族</div><div class="value warn-text" id="stat-incomplete-families">-</div></div>
+  <div class="stat"><div class="label">槽位完成率</div><div class="value" id="stat-slot-ratio">-</div></div>
+  <div class="stat"><div class="label">总快照数</div><div class="value" id="stat-total-snapshots">-</div></div>
+  <div class="stat"><div class="label">最近 5 分钟新增</div><div class="value" id="stat-recent-5m">-</div></div>
+  <div class="stat"><div class="label">最近 60 分钟新增</div><div class="value" id="stat-recent-60m">-</div></div>
+  <div class="stat"><div class="label">最新抓取时间</div><div class="value" id="stat-latest-time" style="font-size:16px;">-</div></div>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0;">当前抓取任务</h3>
+  <div class="kv">
+    <div class="label">状态</div><div id="run-status">-</div>
+    <div class="label">启动时间</div><div id="run-started-at">-</div>
+    <div class="label">最近更新</div><div id="run-last-update">-</div>
+    <div class="label">Supervisor 重启次数</div><div id="run-restarts">-</div>
+    <div class="label">主日志路径</div><div class="mono" id="run-log-path">-</div>
+  </div>
+  <div class="tail-box mono" id="run-tail">暂无日志</div>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0;">Worker 状态</h3>
+  <div class="worker-grid" id="workers"></div>
+</div>
+
+<div class="card">
+  <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
+    <h3 style="margin:0;">缺口饰品列表</h3>
+    <div class="muted" id="table-summary">-</div>
+  </div>
+  <div class="table-wrap" style="margin-top:12px;">
+    <table>
+      <thead>
+        <tr>
+          <th>饰品</th>
+          <th>收藏品</th>
+          <th>稀有度</th>
+          <th>槽位</th>
+          <th>缺口</th>
+          <th>完成率</th>
+          <th>支持 StatTrak</th>
+          <th>最近抓取</th>
+          <th>外观</th>
+        </tr>
+      </thead>
+      <tbody id="gap-rows"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  let refreshTimer = null;
+
+  function fmtInt(value) {
+    if (value === null || value === undefined) return '-';
+    return Number(value).toLocaleString('zh-CN');
+  }
+
+  function fmtPercent(value) {
+    if (value === null || value === undefined) return '-';
+    return `${(Number(value) * 100).toFixed(1)}%`;
+  }
+
+  function fmtDate(value) {
+    if (!value) return '-';
+    return String(value).replace('T', ' ').replace('+00:00', ' UTC');
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  function collectParams() {
+    return new URLSearchParams({
+      search: document.getElementById('search').value.trim(),
+      status: document.getElementById('status').value,
+      sort_by: document.getElementById('sort-by').value,
+      sort_dir: document.getElementById('sort-dir').value,
+      limit: document.getElementById('limit').value,
+      offset: '0',
+    });
+  }
+
+  async function fetchJsonNoCache(url, options = {}) {
+    const response = await fetch(url, {
+      cache: 'no-store',
+      ...options,
+      headers: {
+        'Cache-Control': 'no-cache',
+        ...(options.headers || {}),
+      },
+    });
+    return response.json();
+  }
+
+  function renderSummary(summary) {
+    document.getElementById('stat-total-families').textContent = fmtInt(summary.total_families);
+    document.getElementById('stat-complete-families').textContent = fmtInt(summary.complete_families);
+    document.getElementById('stat-incomplete-families').textContent = fmtInt(summary.incomplete_families);
+    document.getElementById('stat-slot-ratio').textContent = `${fmtPercent(summary.slot_completion_ratio)} (${fmtInt(summary.cached_slots)} / ${fmtInt(summary.expected_slots)})`;
+    document.getElementById('stat-total-snapshots').textContent = fmtInt(summary.total_snapshots);
+    document.getElementById('stat-recent-5m').textContent = fmtInt(summary.recent_snapshots_5m);
+    document.getElementById('stat-recent-60m').textContent = fmtInt(summary.recent_snapshots_60m);
+    document.getElementById('stat-latest-time').textContent = fmtDate(summary.latest_fetched_at);
+  }
+
+  function renderRun(run) {
+    document.getElementById('run-status').innerHTML = `<span class="${run.status === 'failed' ? 'danger-text' : run.status === 'completed' ? 'good' : 'warn-text'}">${escapeHtml(run.status || '-')}</span>`;
+    document.getElementById('run-started-at').textContent = run.started_at || '-';
+    document.getElementById('run-last-update').textContent = fmtDate(run.last_update_at);
+    document.getElementById('run-restarts').textContent = fmtInt(run.restart_count || 0);
+    document.getElementById('run-log-path').textContent = run.log_path || '-';
+    document.getElementById('run-tail').textContent = (run.tail || []).join('\n') || '暂无日志';
+  }
+
+  function renderWorkers(workers) {
+    const el = document.getElementById('workers');
+    if (!workers || workers.length === 0) {
+      el.innerHTML = '<div class="muted">暂无 Worker 日志。</div>';
+      return;
+    }
+    el.innerHTML = workers.map((worker) => `
+      <div class="worker-card">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
+          <strong>Worker ${escapeHtml(worker.worker_id)}</strong>
+          <span class="${worker.status === 'failed' ? 'danger-text' : worker.status === 'completed' ? 'good' : 'warn-text'}">${escapeHtml(worker.status)}</span>
+        </div>
+        <div class="muted" style="margin-top:6px;">${escapeHtml(worker.message || '-')}</div>
+        <div class="progress-bar"><span style="width:${(Number(worker.progress_ratio || 0) * 100).toFixed(1)}%;"></span></div>
+        <div class="kv" style="margin-top:10px;">
+          <div class="label">进度</div><div>${fmtInt(worker.progress_current)} / ${fmtInt(worker.progress_total)}</div>
+          <div class="label">最近更新</div><div>${fmtDate(worker.last_update_at)}</div>
+          <div class="label">日志路径</div><div class="mono">${escapeHtml(worker.log_path || '-')}</div>
+        </div>
+        <div class="tail-box mono">${escapeHtml((worker.tail || []).join('\n') || '暂无日志')}</div>
+      </div>
+    `).join('');
+  }
+
+  function renderRows(rows, total, limit, offset) {
+    const tbody = document.getElementById('gap-rows');
+    document.getElementById('table-summary').textContent = `当前显示 ${fmtInt(rows.length)} / ${fmtInt(total)} 条，偏移 ${fmtInt(offset)}，每页 ${fmtInt(limit)} 条`;
+    if (!rows || rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="9" class="muted">没有符合条件的缺口记录。</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map((row) => `
+      <tr>
+        <td>
+          <div>${escapeHtml(row.item_name_zh || row.item_name)}</div>
+          <div class="muted">${escapeHtml(row.item_name)}</div>
+        </td>
+        <td>
+          <div>${escapeHtml(row.collection_zh || row.collection)}</div>
+          <div class="muted">${escapeHtml(row.collection)}</div>
+        </td>
+        <td>${escapeHtml(row.rarity_name_zh || row.rarity_name)}</td>
+        <td>${fmtInt(row.cached_slots)} / ${fmtInt(row.expected_slots)}</td>
+        <td class="${row.missing_slots > 0 ? 'warn-text' : 'good'}">${fmtInt(row.missing_slots)}</td>
+        <td>${fmtPercent(row.completion_ratio)}</td>
+        <td>${row.supports_stattrak ? '是' : '否'}</td>
+        <td>${fmtDate(row.latest_fetched_at)}</td>
+        <td>${(row.available_exteriors_zh || []).map((value) => `<span class="chip">${escapeHtml(value)}</span>`).join(' ')}</td>
+      </tr>
+    `).join('');
+  }
+
+  async function refreshProgress() {
+    const params = collectParams();
+    const data = await fetchJsonNoCache(`/api/crawl/progress?${params.toString()}`);
+    renderSummary(data.summary || {});
+    renderRun(data.run || {});
+    renderWorkers(data.workers || []);
+    renderRows(data.rows || [], data.total || 0, data.limit || 0, data.offset || 0);
+  }
+
+  function bindAutoRefresh() {
+    if (refreshTimer) {
+      clearInterval(refreshTimer);
+      refreshTimer = null;
+    }
+    const seconds = Number(document.getElementById('auto-refresh').value || 0);
+    if (seconds > 0) {
+      refreshTimer = setInterval(refreshProgress, seconds * 1000);
+    }
+  }
+
+  document.getElementById('btn-refresh').addEventListener('click', refreshProgress);
+  document.getElementById('search').addEventListener('change', refreshProgress);
+  document.getElementById('status').addEventListener('change', refreshProgress);
+  document.getElementById('sort-by').addEventListener('change', refreshProgress);
+  document.getElementById('sort-dir').addEventListener('change', refreshProgress);
+  document.getElementById('limit').addEventListener('change', refreshProgress);
+  document.getElementById('auto-refresh').addEventListener('change', bindAutoRefresh);
+
+  refreshProgress();
+  bindAutoRefresh();
+</script>
+{% endblock %}

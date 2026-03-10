@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+env/
+.env
+Thumbs.db
+.DS_Store
+.coverage
+htmlcov/
+*.log
+*.sqlite-shm
+*.sqlite-wal
+output/

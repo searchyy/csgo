@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}单枪优化 - CS2 炼金工作台{% endblock %}
+{% block body %}
+<div class="hero">
+  <h1>单目标最优炼金方案</h1>
+  <p>输入目标枪械和目标外观，系统会实时反推合法配方，并按收益表现排序展示。</p>
+</div>
+
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <label>目标枪械</label>
+      <input id="item-name" list="item-list" placeholder="例如 AK-47 | Redline" />
+      <datalist id="item-list"></datalist>
+    </div>
+    <div>
+      <label>目标外观</label>
+      <select id="exterior">
+        <option value="Factory New">崭新出厂</option>
+        <option value="Minimal Wear" selected>略有磨损</option>
+        <option value="Field-Tested">久经沙场</option>
+        <option value="Well-Worn">破损不堪</option>
+        <option value="Battle-Scarred">战痕累累</option>
+      </select>
+    </div>
+    <div>
+      <label>最小 ROI</label>
+      <input id="roi-threshold" type="number" step="0.01" value="0" />
+    </div>
+    <div>
+      <label>最多公式数</label>
+      <input id="formula-limit" type="number" min="1" value="20" />
+    </div>
+    <div>
+      <label>主系列最少材料数</label>
+      <input id="min-target-count" type="number" min="1" max="10" value="1" />
+    </div>
+    <div>
+      <label>主系列最多材料数</label>
+      <input id="max-target-count" type="number" min="1" max="10" value="10" />
+    </div>
+    <div>
+      <label>最大辅系列数量</label>
+      <input id="max-auxiliary-collections" type="number" min="0" max="9" value="2" />
+    </div>
+    <div>
+      <label>仅用缓存</label>
+      <select id="cache-only">
+        <option value="false" selected>否</option>
+        <option value="true">是</option>
+      </select>
+    </div>
+    <div>
+      <label>结果落库</label>
+      <select id="persist">
+        <option value="true" selected>是</option>
+        <option value="false">否</option>
+      </select>
+    </div>
+    <div>
+      <label>开始计算</label>
+      <button id="btn-run">计算最优方案</button>
+    </div>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="label">候选方案数</div><div class="value" id="stat-count">-</div></div>
+  <div class="stat"><div class="label">最佳 ROI</div><div class="value" id="stat-best-roi">-</div></div>
+  <div class="stat"><div class="label">最佳 EV</div><div class="value" id="stat-best-ev">-</div></div>
+  <div class="stat"><div class="label">最近持久化 Run</div><div class="value" id="stat-run-id">-</div></div>
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>目标</th>
+          <th>ROI</th>
+          <th>EV</th>
+          <th>成本</th>
+          <th>目标概率</th>
+          <th>配方签名</th>
+          <th>材料建议</th>
+          <th>主要产出</th>
+        </tr>
+      </thead>
+      <tbody id="results"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  const resultEl = document.getElementById('results');
+
+  function fmtPrice(value) {
+    if (value === null || value === undefined) return '-';
+    return Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  }
+
+  async function fetchJsonNoCache(url, options = {}) {
+    const response = await fetch(url, {
+      cache: 'no-store',
+      ...options,
+      headers: {
+        'Cache-Control': 'no-cache',
+        ...(options.headers || {}),
+      },
+    });
+    return response.json();
+  }
+
+  async function loadSuggestions() {
+    const search = document.getElementById('item-name').value.trim();
+    const params = new URLSearchParams({ limit: '100', search });
+    const data = await fetchJsonNoCache(`/api/catalog/items?${params.toString()}`);
+    const list = document.getElementById('item-list');
+    list.innerHTML = (data.rows || []).map((row) => `<option value="${row.name}">${row.name_zh}</option>`).join('');
+  }
+
+  async function runOptimizer() {
+    const params = new URLSearchParams({
+      item_name: document.getElementById('item-name').value,
+      exterior: document.getElementById('exterior').value,
+      roi_threshold: document.getElementById('roi-threshold').value,
+      formula_limit: document.getElementById('formula-limit').value,
+      min_target_count: document.getElementById('min-target-count').value,
+      max_target_count: document.getElementById('max-target-count').value,
+      max_auxiliary_collections: document.getElementById('max-auxiliary-collections').value,
+      cache_only: document.getElementById('cache-only').value,
+      persist: document.getElementById('persist').value,
+    });
+    const data = await fetchJsonNoCache(`/api/optimizer?${params.toString()}`);
+    renderResults(data.rows || [], data.run_id || null);
+  }
+
+  function renderResults(rows, runId) {
+    resultEl.innerHTML = rows.map((row) => {
+      const materials = (row.materials || []).map((entry) =>
+        `<div>${entry.item_name_zh} x${entry.count} / ${entry.requested_exterior_zh} / <= ${Number(entry.max_float).toFixed(5)} / ${fmtPrice(entry.unit_price)}</div>`
+      ).join('');
+      const outcomes = (row.outcomes || []).map((entry) =>
+        `<div>${entry.item_name_zh} / ${entry.exterior_zh} / p=${(Number(entry.probability) * 100).toFixed(2)}% / ${fmtPrice(entry.market_price)}</div>`
+      ).join('');
+      return `
+        <tr>
+          <td>
+            <div>${row.target_item_zh}</div>
+            <div class="muted">${row.target_exterior_zh} / ${row.target_collection_zh}</div>
+          </td>
+          <td class="good">${row.roi_percent.toFixed(2)}%</td>
+          <td class="good">${fmtPrice(row.expected_profit)}</td>
+          <td>${fmtPrice(row.total_cost)}</td>
+          <td>${(Number(row.target_probability) * 100).toFixed(2)}%</td>
+          <td class="mono">${row.formula_signature}</td>
+          <td>${materials}</td>
+          <td>${outcomes}</td>
+        </tr>
+      `;
+    }).join('') || '<tr><td colspan="8" class="muted" style="text-align:center;">请输入目标枪械后开始计算</td></tr>';
+
+    document.getElementById('stat-count').textContent = rows.length;
+    document.getElementById('stat-best-roi').textContent = rows.length ? `${rows[0].roi_percent.toFixed(2)}%` : '-';
+    document.getElementById('stat-best-ev').textContent = rows.length ? fmtPrice(Math.max(...rows.map((row) => Number(row.expected_profit)))) : '-';
+    document.getElementById('stat-run-id').textContent = runId || '-';
+  }
+
+  document.getElementById('btn-run').addEventListener('click', runOptimizer);
+  document.getElementById('item-name').addEventListener('input', loadSuggestions);
+  loadSuggestions();
+</script>
+{% endblock %}
