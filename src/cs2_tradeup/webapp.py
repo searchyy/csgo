@@ -406,6 +406,7 @@ def create_app(
         sort_by = request.args.get("sort_by", "roi")
         sort_dir = request.args.get("sort_dir", "desc")
         store = load_scan_store()
+        explicit_run_id = int(run_id) if run_id not in (None, "") else None
         rows = store.list_results(
             limit=limit,
             min_roi=float(min_roi) if min_roi not in (None, "") else None,
@@ -421,7 +422,8 @@ def create_app(
                 else None
             ),
             search=search,
-            run_id=int(run_id) if run_id not in (None, "") else None,
+            run_id=explicit_run_id,
+            latest_run_only=(explicit_run_id is None),
             target_collection=target_collection,
             target_exterior=target_exterior,
             target_rarity_name=target_rarity_name,

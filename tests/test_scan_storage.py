@@ -96,6 +96,7 @@ class ScanStorageTests(unittest.TestCase):
 
             runs = store.list_runs()
             results = store.list_results(search="Target Gun")
+            results_latest = store.list_results(latest_run_only=True)
 
         self.assertEqual(inserted, 1)
         self.assertEqual(len(runs), 1)
@@ -103,6 +104,8 @@ class ScanStorageTests(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].target_item, "Target Gun")
         self.assertGreater(results[0].roi, 1.7)
+        self.assertEqual(len(results_latest), 1)
+        self.assertEqual(results_latest[0].target_item, "Target Gun")
 
 
 if __name__ == "__main__":
