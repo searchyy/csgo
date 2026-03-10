@@ -10,6 +10,7 @@ Thumbs.db
 .coverage
 htmlcov/
 *.log
+data/scheduler.sqlite
 *.sqlite-shm
 *.sqlite-wal
 output/
