@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cs2-tradeup"
+version = "0.1.0"
+description = "Core calculators for CS2 trade-up contracts"
+requires-python = ">=3.11"
+dependencies = [
+  "flask>=3.0",
+  "requests>=2.31",
+]
+
+[project.optional-dependencies]
+browser = [
+  "playwright>=1.44",
+  "selenium>=4.20",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
