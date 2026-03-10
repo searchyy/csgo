@@ -108,6 +108,54 @@
 </div>
 
 <div class="card">
+  <div class="section-title">发起抓取任务</div>
+  <div class="toolbar wide" style="margin-bottom:12px;">
+    <div style="grid-column:1/-1;">
+      <label>指定枪械（留空则抓取全部）</label>
+      <textarea id="crawl-items" placeholder="留空按整个静态库持续抓价，多行或逗号分隔枪名" style="width:100%;height:72px;"></textarea>
+    </div>
+    <div>
+      <label>最多抓取条数</label>
+      <input id="crawl-max-items" type="number" min="1" placeholder="不限" />
+    </div>
+    <div>
+      <label>休眠秒数（最小 / 最大）</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+        <input id="crawl-sleep-min" type="number" step="0.1" value="0.8" />
+        <input id="crawl-sleep-max" type="number" step="0.1" value="1.8" />
+      </div>
+    </div>
+    <div>
+      <label>跳过最近缓存（秒）</label>
+      <input id="crawl-skip-recent" type="number" min="0" value="21600" />
+    </div>
+    <div>
+      <label>批次大小</label>
+      <input id="crawl-batch-size" type="number" min="1" value="20" />
+    </div>
+    <div>
+      <label>批次冷却（最小 / 最大秒）</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+        <input id="crawl-batch-cooldown-min" type="number" step="0.1" value="6" />
+        <input id="crawl-batch-cooldown-max" type="number" step="0.1" value="12" />
+      </div>
+    </div>
+    <div>
+      <label>失败重试 / 退避秒数</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+        <input id="crawl-retry-attempts" type="number" min="0" value="2" />
+        <input id="crawl-failure-backoff" type="number" step="0.1" value="8" />
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;justify-content:flex-end;">
+      <button id="btn-crawl-all" class="warn">一键抓取全部枪械</button>
+      <button id="btn-crawl-items">抓取指定枪械</button>
+    </div>
+  </div>
+  <div class="footer-note" id="crawl-feedback">抓取结果会持续写入 <code>data/steamdt_prices.sqlite</code>，在后台运行，不影响页面浏览。</div>
+</div>
+
+<div class="card">
   <div class="section-title">当前抓取任务</div>
   <div class="kv">
     <div class="label">状态</div><div id="run-status">-</div>
@@ -290,5 +338,49 @@
 
   refreshProgress();
   bindAutoRefresh();
+
+  function splitItemNames(raw) {
+    return raw.split(/\n|,/g).map((v) => v.trim()).filter(Boolean);
+  }
+
+  async function startCrawl(itemNames) {
+    const payload = {
+      item_names: itemNames,
+      max_items: document.getElementById('crawl-max-items').value || null,
+      sleep_min_seconds: document.getElementById('crawl-sleep-min').value,
+      sleep_max_seconds: document.getElementById('crawl-sleep-max').value,
+      skip_recent_seconds: document.getElementById('crawl-skip-recent').value || null,
+      batch_size: document.getElementById('crawl-batch-size').value,
+      batch_cooldown_min_seconds: document.getElementById('crawl-batch-cooldown-min').value,
+      batch_cooldown_max_seconds: document.getElementById('crawl-batch-cooldown-max').value,
+      retry_attempts: document.getElementById('crawl-retry-attempts').value,
+      failure_backoff_base_seconds: document.getElementById('crawl-failure-backoff').value,
+    };
+    const r = await fetch('/api/tasks/crawl-prices', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      cache: 'no-store',
+    });
+    const feedback = document.getElementById('crawl-feedback');
+    if (r.ok) {
+      feedback.textContent = `任务已提交（${new Date().toLocaleTimeString('zh-CN')}），后台抓取中……`;
+      refreshProgress();
+    } else {
+      feedback.textContent = `提交失败：HTTP ${r.status}`;
+    }
+  }
+
+  document.getElementById('btn-crawl-all').addEventListener('click', () => {
+    startCrawl([]);
+  });
+  document.getElementById('btn-crawl-items').addEventListener('click', () => {
+    const names = splitItemNames(document.getElementById('crawl-items').value);
+    if (!names.length) {
+      document.getElementById('crawl-feedback').textContent = '请先填写要抓取的枪械名称';
+      return;
+    }
+    startCrawl(names);
+  });
 </script>
 {% endblock %}

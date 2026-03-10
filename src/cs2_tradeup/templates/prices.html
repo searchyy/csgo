@@ -108,62 +108,6 @@
   <div class="stat"><div class="label">最高安全价</div><div class="value" id="stat-max-price">-</div></div>
 </div>
 
-<div class="card">
-  <details id="crawl-panel">
-    <summary>▸ 后台抓价任务（点击展开）</summary>
-    <div style="margin-top:14px;">
-      <div class="toolbar wide">
-        <div>
-          <label>抓取枪名（可选）</label>
-          <textarea id="crawl-items" placeholder="留空按整个静态库持续抓价，多行或逗号分隔"></textarea>
-        </div>
-        <div>
-          <label>最多抓取条数</label>
-          <input id="crawl-max-items" type="number" min="1" placeholder="不限" />
-        </div>
-        <div>
-          <label>休眠秒数（最小 / 最大）</label>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-            <input id="crawl-sleep-min" type="number" step="0.1" value="0.8" />
-            <input id="crawl-sleep-max" type="number" step="0.1" value="1.8" />
-          </div>
-        </div>
-        <div>
-          <label>跳过最近缓存（秒）</label>
-          <input id="crawl-skip-recent" type="number" min="0" value="21600" />
-        </div>
-        <div>
-          <label>批次大小</label>
-          <input id="crawl-batch-size" type="number" min="1" value="20" />
-        </div>
-        <div>
-          <label>批次冷却（最小 / 最大秒）</label>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-            <input id="crawl-batch-cooldown-min" type="number" step="0.1" value="6" />
-            <input id="crawl-batch-cooldown-max" type="number" step="0.1" value="12" />
-          </div>
-        </div>
-        <div>
-          <label>失败重试 / 退避秒数</label>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-            <input id="crawl-retry-attempts" type="number" min="0" value="2" />
-            <input id="crawl-failure-backoff" type="number" step="0.1" value="8" />
-          </div>
-        </div>
-        <div>
-          <label>发起任务</label>
-          <button id="btn-crawl" class="warn">开始抓价写库</button>
-        </div>
-      </div>
-      <div class="footer-note" style="margin-top:10px;">抓取结果会持续写入 <code>data/steamdt_prices.sqlite</code>，在后台运行，不影响页面浏览。</div>
-    </div>
-  </details>
-</div>
-
-<div class="card">
-  <div class="section-title">最近后台任务</div>
-  <div class="job-list" id="jobs"><div class="muted">暂无后台任务</div></div>
-</div>
 
 <div class="card">
   <div class="table-wrap">
@@ -188,7 +132,6 @@
 
 <script>
   const rowsEl = document.getElementById('rows');
-  const jobsEl = document.getElementById('jobs');
   const liveStatusEl = document.getElementById('live-status');
   let pricesRefreshTimer = null;
   let pricesRefreshInFlight = false;
@@ -216,10 +159,6 @@
     const interval = Number(document.getElementById('auto-refresh').value || 0);
     const mode = interval > 0 ? `自动刷新 ${interval / 1000}s` : '自动刷新已关闭';
     liveStatusEl.textContent = message ? `${mode} · ${message}` : mode;
-  }
-
-  function splitItemNames(raw) {
-    return raw.split(/\n|,/g).map((v) => v.trim()).filter(Boolean);
   }
 
   function riskChip(row) {
@@ -295,53 +234,6 @@
       ? fmtPrice(Math.max(...priced.map((r) => Number(r.safe_price ?? r.lowest_price)))) : '-';
   }
 
-  async function loadJobs() {
-    const data = await fetchJson('/api/tasks?limit=8');
-    const rows = data.rows || [];
-    jobsEl.innerHTML = rows.map((job) => {
-      const total = Number(job.progress_total || 0);
-      const current = Number(job.progress_current || 0);
-      const percent = total > 0 ? Math.min(100, (current / total) * 100) : 0;
-      const statusChip = job.status === 'completed'
-        ? '<span class="chip green">完成</span>'
-        : job.status === 'failed'
-        ? '<span class="chip red">失败</span>'
-        : '<span class="chip blue">运行中</span>';
-      return `
-        <div class="job-item">
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <strong>${job.title}</strong>${statusChip}
-          </div>
-          <div class="muted-sm" style="margin-top:4px;">${job.progress_message || ''}</div>
-          <div class="progress-bar"><span style="width:${percent.toFixed(1)}%;"></span></div>
-          <div class="muted-sm" style="margin-top:4px;">进度 ${current} / ${total || '-'}</div>
-          ${job.error_message ? `<div class="danger-text" style="margin-top:4px;">失败：${job.error_message}</div>` : ''}
-        </div>`;
-    }).join('') || '<div class="muted">暂无后台任务</div>';
-  }
-
-  async function startCrawl() {
-    const payload = {
-      item_names: splitItemNames(document.getElementById('crawl-items').value),
-      max_items: document.getElementById('crawl-max-items').value || null,
-      sleep_min_seconds: document.getElementById('crawl-sleep-min').value,
-      sleep_max_seconds: document.getElementById('crawl-sleep-max').value,
-      skip_recent_seconds: document.getElementById('crawl-skip-recent').value || null,
-      batch_size: document.getElementById('crawl-batch-size').value,
-      batch_cooldown_min_seconds: document.getElementById('crawl-batch-cooldown-min').value,
-      batch_cooldown_max_seconds: document.getElementById('crawl-batch-cooldown-max').value,
-      retry_attempts: document.getElementById('crawl-retry-attempts').value,
-      failure_backoff_base_seconds: document.getElementById('crawl-failure-backoff').value,
-    };
-    await fetch('/api/tasks/crawl-prices', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      cache: 'no-store',
-    });
-    await refresh();
-  }
-
   async function loadMeta() {
     const data = await fetchJson('/api/meta/options');
     for (const [id, rows] of [
@@ -362,7 +254,7 @@
   }
 
   async function refresh() {
-    await Promise.all([loadPrices(), loadJobs()]);
+    await loadPrices();
   }
 
   function syncAutoRefresh() {
@@ -375,7 +267,6 @@
   }
 
   document.getElementById('btn-refresh').addEventListener('click', refresh);
-  document.getElementById('btn-crawl').addEventListener('click', startCrawl);
   document.getElementById('auto-refresh').addEventListener('change', syncAutoRefresh);
   ['search','variant','exterior','collection','rarity-name','platform','min-price','max-price','has-price-only','sort-by','sort-dir','limit'].forEach((id) => {
     const el = document.getElementById(id);
