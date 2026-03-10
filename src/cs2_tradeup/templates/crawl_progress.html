@@ -155,6 +155,11 @@
   <div class="footer-note" id="crawl-feedback">抓取结果会持续写入 <code>data/steamdt_prices.sqlite</code>，在后台运行，不影响页面浏览。</div>
 </div>
 
+<div class="card" id="task-progress-card">
+  <div class="section-title">后台任务进度</div>
+  <div id="task-progress-list"><div class="muted">暂无后台任务</div></div>
+</div>
+
 <div class="card">
   <div class="section-title">当前抓取任务</div>
   <div class="kv">
@@ -315,9 +320,38 @@
       </tr>`).join('');
   }
 
+  async function loadTasks() {
+    const data = await fetchJson('/api/tasks?limit=6');
+    const rows = data.rows || [];
+    const el = document.getElementById('task-progress-list');
+    if (!rows.length) { el.innerHTML = '<div class="muted">暂无后台任务</div>'; return; }
+    el.innerHTML = rows.map((job) => {
+      const total = Number(job.progress_total || 0);
+      const current = Number(job.progress_current || 0);
+      const percent = total > 0 ? Math.min(100, (current / total) * 100) : 0;
+      const chip = job.status === 'completed'
+        ? '<span class="chip green">完成</span>'
+        : job.status === 'failed'
+        ? '<span class="chip red">失败</span>'
+        : '<span class="chip blue">运行中</span>';
+      return `<div class="job-item" style="margin-bottom:12px;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <strong>${esc(job.title)}</strong>${chip}
+        </div>
+        <div class="muted-sm" style="margin-top:4px;">${esc(job.progress_message || '')}</div>
+        <div class="progress-bar"><span style="width:${percent.toFixed(1)}%;"></span></div>
+        <div class="muted-sm" style="margin-top:4px;">进度 ${fmtInt(current)} / ${total ? fmtInt(total) : '-'}</div>
+        ${job.error_message ? `<div class="danger-text" style="margin-top:4px;">失败：${esc(job.error_message)}</div>` : ''}
+      </div>`;
+    }).join('');
+  }
+
   async function refreshProgress() {
     const params = collectParams();
-    const data = await fetchJson(`/api/crawl/progress?${params}`);
+    const [data] = await Promise.all([
+      fetchJson(`/api/crawl/progress?${params}`),
+      loadTasks(),
+    ]);
     renderSummary(data.summary || {});
     renderRun(data.run || {});
     renderWorkers(data.workers || []);
@@ -365,6 +399,7 @@
     const feedback = document.getElementById('crawl-feedback');
     if (r.ok) {
       feedback.textContent = `任务已提交（${new Date().toLocaleTimeString('zh-CN')}），后台抓取中……`;
+      await loadTasks();
       refreshProgress();
     } else {
       feedback.textContent = `提交失败：HTTP ${r.status}`;
