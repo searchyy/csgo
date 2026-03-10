@@ -299,7 +299,7 @@
   });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 
-  loadMeta().then(refresh);
+  Promise.all([loadMeta(), refresh()]);
   syncAutoRefresh();
 </script>
 {% endblock %}

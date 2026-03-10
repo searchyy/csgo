@@ -399,7 +399,6 @@
     const feedback = document.getElementById('crawl-feedback');
     if (r.ok) {
       feedback.textContent = `任务已提交（${new Date().toLocaleTimeString('zh-CN')}），后台抓取中……`;
-      await loadTasks();
       refreshProgress();
     } else {
       feedback.textContent = `提交失败：HTTP ${r.status}`;
