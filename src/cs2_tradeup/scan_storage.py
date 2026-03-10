@@ -215,6 +215,7 @@ class TradeUpScanResultStore:
         max_total_cost: float | None = None,
         search: str | None = None,
         run_id: int | None = None,
+        latest_run_only: bool = False,
         target_collection: str | None = None,
         target_exterior: str | None = None,
         target_rarity_name: str | None = None,
@@ -244,6 +245,10 @@ class TradeUpScanResultStore:
         if run_id is not None:
             where_clauses.append("run_id = ?")
             params.append(int(run_id))
+        elif latest_run_only:
+            where_clauses.append(
+                f'run_id = (SELECT MAX(id) FROM "{self.runs_table}" WHERE status = \'completed\')'
+            )
         if target_collection:
             where_clauses.append("target_collection = ?")
             params.append(target_collection)
