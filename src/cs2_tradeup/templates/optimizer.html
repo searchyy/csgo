@@ -1,13 +1,63 @@
 {% extends "base.html" %}
 {% block title %}单枪优化 - CS2 炼金工作台{% endblock %}
+{% block head %}
+<style>
+  .roi-high  { color: #4ade80; font-weight: 700; }
+  .roi-mid   { color: #facc15; font-weight: 700; }
+  .roi-low   { color: var(--text); font-weight: 600; }
+  .result-card {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px;
+    background: #0c1528;
+    margin-bottom: 10px;
+  }
+  .result-header {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .result-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .metric-box {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .metric-box .label { font-size: 11px; color: var(--muted); text-transform: uppercase; }
+  .metric-box .value { font-size: 16px; font-weight: 700; margin-top: 3px; }
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  @media (max-width: 760px) { .two-col { grid-template-columns: 1fr; } }
+  .list-section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  .list-section .label { font-size: 11px; color: var(--muted); text-transform: uppercase; margin-bottom: 8px; }
+  .material-row { display: flex; flex-direction: column; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .material-row:last-child { border-bottom: none; }
+  .outcome-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .outcome-row:last-child { border-bottom: none; }
+  #results-container { display: none; }
+  #results-container.visible { display: block; }
+  #empty-state { color: var(--muted); text-align: center; padding: 32px; }
+</style>
+{% endblock %}
 {% block body %}
 <div class="hero">
   <h1>单目标最优炼金方案</h1>
-  <p>输入目标枪械和目标外观，系统会实时反推合法配方，并按收益表现排序展示。</p>
+  <p>输入目标枪械和外观，系统实时反推合法配方，并按 ROI 排序展示。</p>
 </div>
 
 <div class="card">
-  <div class="toolbar">
+  <div class="toolbar wide">
     <div>
       <label>目标枪械</label>
       <input id="item-name" list="item-list" placeholder="例如 AK-47 | Redline" />
@@ -24,38 +74,35 @@
       </select>
     </div>
     <div>
-      <label>最小 ROI</label>
-      <input id="roi-threshold" type="number" step="0.01" value="0" />
+      <label>最小 ROI / 最多方案</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+        <input id="roi-threshold" type="number" step="0.01" value="0" placeholder="ROI 下限" />
+        <input id="formula-limit" type="number" min="1" value="20" placeholder="最多" />
+      </div>
     </div>
     <div>
-      <label>最多公式数</label>
-      <input id="formula-limit" type="number" min="1" value="20" />
-    </div>
-    <div>
-      <label>主系列最少材料数</label>
-      <input id="min-target-count" type="number" min="1" max="10" value="1" />
-    </div>
-    <div>
-      <label>主系列最多材料数</label>
-      <input id="max-target-count" type="number" min="1" max="10" value="10" />
+      <label>主系列材料数（最少 / 最多）</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+        <input id="min-target-count" type="number" min="1" max="10" value="1" />
+        <input id="max-target-count" type="number" min="1" max="10" value="10" />
+      </div>
     </div>
     <div>
       <label>最大辅系列数量</label>
       <input id="max-auxiliary-collections" type="number" min="0" max="9" value="2" />
     </div>
     <div>
-      <label>仅用缓存</label>
-      <select id="cache-only">
-        <option value="false" selected>否</option>
-        <option value="true">是</option>
-      </select>
-    </div>
-    <div>
-      <label>结果落库</label>
-      <select id="persist">
-        <option value="true" selected>是</option>
-        <option value="false">否</option>
-      </select>
+      <label>仅用缓存 / 结果落库</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+        <select id="cache-only">
+          <option value="false" selected>否</option>
+          <option value="true">是</option>
+        </select>
+        <select id="persist">
+          <option value="true" selected>落库</option>
+          <option value="false">不落库</option>
+        </select>
+      </div>
     </div>
     <div>
       <label>开始计算</label>
@@ -65,105 +112,160 @@
 </div>
 
 <div class="stats">
-  <div class="stat"><div class="label">候选方案数</div><div class="value" id="stat-count">-</div></div>
-  <div class="stat"><div class="label">最佳 ROI</div><div class="value" id="stat-best-roi">-</div></div>
-  <div class="stat"><div class="label">最佳 EV</div><div class="value" id="stat-best-ev">-</div></div>
-  <div class="stat"><div class="label">最近持久化 Run</div><div class="value" id="stat-run-id">-</div></div>
+  <div class="stat"><div class="label">候选方案</div><div class="value" id="stat-count">-</div></div>
+  <div class="stat"><div class="label">最佳 ROI</div><div class="value good" id="stat-best-roi">-</div></div>
+  <div class="stat"><div class="label">最高 EV</div><div class="value good" id="stat-best-ev">-</div></div>
+  <div class="stat"><div class="label">关联 Run</div><div class="value" id="stat-run-id">-</div></div>
 </div>
 
-<div class="card">
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>目标</th>
-          <th>ROI</th>
-          <th>EV</th>
-          <th>成本</th>
-          <th>目标概率</th>
-          <th>配方签名</th>
-          <th>材料建议</th>
-          <th>主要产出</th>
-        </tr>
-      </thead>
-      <tbody id="results"></tbody>
-    </table>
-  </div>
+<div id="results-container">
+  <div id="results"></div>
 </div>
+<div id="empty-state">请输入目标枪械后点击「计算最优方案」</div>
 
 <script>
-  const resultEl = document.getElementById('results');
+  const resultsEl = document.getElementById('results');
+  const containerEl = document.getElementById('results-container');
+  const emptyEl = document.getElementById('empty-state');
 
   function fmtPrice(value) {
     if (value === null || value === undefined) return '-';
-    return Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    return '¥' + Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
   }
 
-  async function fetchJsonNoCache(url, options = {}) {
+  function fmtPct(value) {
+    return (Number(value) * 100).toFixed(2) + '%';
+  }
+
+  function roiClass(roi) {
+    if (Number(roi) >= 2.0) return 'roi-high';
+    if (Number(roi) >= 1.5) return 'roi-mid';
+    return 'roi-low';
+  }
+
+  async function fetchJson(url, options = {}) {
     const response = await fetch(url, {
-      cache: 'no-store',
-      ...options,
-      headers: {
-        'Cache-Control': 'no-cache',
-        ...(options.headers || {}),
-      },
+      cache: 'no-store', ...options,
+      headers: { 'Cache-Control': 'no-cache', ...(options.headers || {}) },
     });
     return response.json();
   }
 
   async function loadSuggestions() {
     const search = document.getElementById('item-name').value.trim();
-    const params = new URLSearchParams({ limit: '100', search });
-    const data = await fetchJsonNoCache(`/api/catalog/items?${params.toString()}`);
+    const data = await fetchJson(`/api/catalog/items?${new URLSearchParams({ limit: '100', search })}`);
     const list = document.getElementById('item-list');
     list.innerHTML = (data.rows || []).map((row) => `<option value="${row.name}">${row.name_zh}</option>`).join('');
   }
 
   async function runOptimizer() {
-    const params = new URLSearchParams({
-      item_name: document.getElementById('item-name').value,
-      exterior: document.getElementById('exterior').value,
-      roi_threshold: document.getElementById('roi-threshold').value,
-      formula_limit: document.getElementById('formula-limit').value,
-      min_target_count: document.getElementById('min-target-count').value,
-      max_target_count: document.getElementById('max-target-count').value,
-      max_auxiliary_collections: document.getElementById('max-auxiliary-collections').value,
-      cache_only: document.getElementById('cache-only').value,
-      persist: document.getElementById('persist').value,
-    });
-    const data = await fetchJsonNoCache(`/api/optimizer?${params.toString()}`);
-    renderResults(data.rows || [], data.run_id || null);
+    const btn = document.getElementById('btn-run');
+    btn.disabled = true;
+    btn.textContent = '计算中…';
+    try {
+      const params = new URLSearchParams({
+        item_name: document.getElementById('item-name').value,
+        exterior: document.getElementById('exterior').value,
+        roi_threshold: document.getElementById('roi-threshold').value,
+        formula_limit: document.getElementById('formula-limit').value,
+        min_target_count: document.getElementById('min-target-count').value,
+        max_target_count: document.getElementById('max-target-count').value,
+        max_auxiliary_collections: document.getElementById('max-auxiliary-collections').value,
+        cache_only: document.getElementById('cache-only').value,
+        persist: document.getElementById('persist').value,
+      });
+      const data = await fetchJson(`/api/optimizer?${params}`);
+      renderResults(data.rows || [], data.run_id || null);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '计算最优方案';
+    }
   }
 
   function renderResults(rows, runId) {
-    resultEl.innerHTML = rows.map((row) => {
-      const materials = (row.materials || []).map((entry) =>
-        `<div>${entry.item_name_zh} x${entry.count} / ${entry.requested_exterior_zh} / <= ${Number(entry.max_float).toFixed(5)} / ${fmtPrice(entry.unit_price)}</div>`
-      ).join('');
-      const outcomes = (row.outcomes || []).map((entry) =>
-        `<div>${entry.item_name_zh} / ${entry.exterior_zh} / p=${(Number(entry.probability) * 100).toFixed(2)}% / ${fmtPrice(entry.market_price)}</div>`
-      ).join('');
-      return `
-        <tr>
-          <td>
-            <div>${row.target_item_zh}</div>
-            <div class="muted">${row.target_exterior_zh} / ${row.target_collection_zh}</div>
-          </td>
-          <td class="good">${row.roi_percent.toFixed(2)}%</td>
-          <td class="good">${fmtPrice(row.expected_profit)}</td>
-          <td>${fmtPrice(row.total_cost)}</td>
-          <td>${(Number(row.target_probability) * 100).toFixed(2)}%</td>
-          <td class="mono">${row.formula_signature}</td>
-          <td>${materials}</td>
-          <td>${outcomes}</td>
-        </tr>
-      `;
-    }).join('') || '<tr><td colspan="8" class="muted" style="text-align:center;">请输入目标枪械后开始计算</td></tr>';
+    if (rows.length === 0) {
+      containerEl.classList.remove('visible');
+      emptyEl.style.display = 'block';
+      emptyEl.textContent = '未找到满足条件的炼金方案。';
+    } else {
+      containerEl.classList.add('visible');
+      emptyEl.style.display = 'none';
+    }
+
+    const cls = rows.length ? roiClass(rows[0].roi) : '';
 
     document.getElementById('stat-count').textContent = rows.length;
-    document.getElementById('stat-best-roi').textContent = rows.length ? `${rows[0].roi_percent.toFixed(2)}%` : '-';
-    document.getElementById('stat-best-ev').textContent = rows.length ? fmtPrice(Math.max(...rows.map((row) => Number(row.expected_profit)))) : '-';
-    document.getElementById('stat-run-id').textContent = runId || '-';
+    document.getElementById('stat-best-roi').textContent = rows.length ? fmtPct(rows[0].roi - 1) : '-';
+    document.getElementById('stat-best-ev').textContent = rows.length
+      ? fmtPrice(Math.max(...rows.map((r) => Number(r.expected_profit)))) : '-';
+    document.getElementById('stat-run-id').textContent = runId ? `Run #${runId}` : '-';
+
+    resultsEl.innerHTML = rows.map((row, idx) => {
+      const rc = roiClass(row.roi);
+      const materials = (row.materials || []).map((e) => `
+        <div class="material-row">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <span style="font-weight:600;">${e.item_name_zh}</span>
+            <span class="chip">×${e.count}</span>
+            <span class="chip">${e.requested_exterior_zh}</span>
+          </div>
+          <div class="muted-sm" style="margin-top:2px;">
+            浮动 ≤ ${Number(e.max_float).toFixed(5)} &nbsp;·&nbsp; ${fmtPrice(e.unit_price)} / 件
+          </div>
+        </div>`).join('');
+      const outcomes = (row.outcomes || []).map((e) => `
+        <div class="outcome-row">
+          <span>${e.item_name_zh}</span>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="chip">${fmtPct(e.probability)}</span>
+            <span class="good">${fmtPrice(e.market_price)}</span>
+          </div>
+        </div>`).join('');
+
+      return `
+        <div class="result-card">
+          <div class="result-header">
+            <div>
+              <span style="font-size:13px;color:var(--muted);">#${idx + 1}</span>
+              <span style="font-weight:700;margin-left:6px;">${row.target_item_zh}</span>
+              <span class="chip" style="margin-left:6px;">${row.target_exterior_zh}</span>
+            </div>
+            <span class="muted-sm mono">${row.formula_signature}</span>
+          </div>
+          <div class="result-metrics">
+            <div class="metric-box">
+              <div class="label">ROI</div>
+              <div class="value ${rc}">${fmtPct(row.roi - 1)}</div>
+            </div>
+            <div class="metric-box">
+              <div class="label">期望利润</div>
+              <div class="value ${rc}">${fmtPrice(row.expected_profit)}</div>
+            </div>
+            <div class="metric-box">
+              <div class="label">总成本</div>
+              <div class="value">${fmtPrice(row.total_cost)}</div>
+            </div>
+            <div class="metric-box">
+              <div class="label">目标概率</div>
+              <div class="value">${fmtPct(row.target_probability)}</div>
+            </div>
+            <div class="metric-box">
+              <div class="label">系列</div>
+              <div class="value" style="font-size:12px;">${row.target_collection_zh}</div>
+            </div>
+          </div>
+          <div class="two-col">
+            <div class="list-section">
+              <div class="label">材料建议</div>
+              ${materials || '<div class="muted">—</div>'}
+            </div>
+            <div class="list-section">
+              <div class="label">主要产出</div>
+              ${outcomes || '<div class="muted">—</div>'}
+            </div>
+          </div>
+        </div>`;
+    }).join('');
   }
 
   document.getElementById('btn-run').addEventListener('click', runOptimizer);

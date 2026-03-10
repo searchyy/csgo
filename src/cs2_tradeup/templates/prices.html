@@ -2,22 +2,22 @@
 {% block title %}价格看板 - CS2 炼金工作台{% endblock %}
 {% block body %}
 <div class="hero">
-  <h1>当前 CS2 饰品多平台价格看板</h1>
-  <p>优先读取本地 SQLite 价格快照，可发起后台抓价任务持续补全数据库。</p>
+  <h1>多平台价格看板</h1>
+  <p>优先读取本地 SQLite 价格快照，数据来源以 BUFF 为主。</p>
 </div>
 
 <div class="card">
-  <div class="toolbar">
+  <div class="toolbar wide">
     <div>
       <label>搜索</label>
-      <input id="search" placeholder="输入枪名、皮肤名、系列、稀有度" />
+      <input id="search" placeholder="枪名 / 皮肤 / 系列" />
     </div>
     <div>
       <label>版本</label>
       <select id="variant">
         <option value="">全部</option>
         <option value="Normal">普通</option>
-        <option value="StatTrak">StatTrak / 暗金</option>
+        <option value="StatTrak">StatTrak</option>
       </select>
     </div>
     <div>
@@ -33,29 +33,15 @@
     </div>
     <div>
       <label>系列</label>
-      <select id="collection">
-        <option value="">全部</option>
-      </select>
+      <select id="collection"><option value="">全部</option></select>
     </div>
     <div>
       <label>稀有度</label>
-      <select id="rarity-name">
-        <option value="">全部</option>
-      </select>
+      <select id="rarity-name"><option value="">全部</option></select>
     </div>
     <div>
       <label>平台</label>
-      <select id="platform">
-        <option value="">全部</option>
-      </select>
-    </div>
-    <div>
-      <label>安全价下限</label>
-      <input id="min-price" type="number" step="0.01" placeholder="可选" />
-    </div>
-    <div>
-      <label>安全价上限</label>
-      <input id="max-price" type="number" step="0.01" placeholder="可选" />
+      <select id="platform"><option value="">全部</option></select>
     </div>
     <div>
       <label>仅看有价</label>
@@ -65,31 +51,37 @@
       </select>
     </div>
     <div>
+      <label>安全价范围</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+        <input id="min-price" type="number" step="0.01" placeholder="最低" />
+        <input id="max-price" type="number" step="0.01" placeholder="最高" />
+      </div>
+    </div>
+    <div>
       <label>排序</label>
       <select id="sort-by">
-        <option value="item">按名称</option>
-        <option value="lowest_price">按最低价</option>
-        <option value="safe_price">按安全价</option>
-        <option value="recent_average_price">按近期均价</option>
-        <option value="sell_num">按在售数量</option>
-        <option value="fetched_at">按抓取时间</option>
-        <option value="platform_price">按选定平台价格</option>
+        <option value="item">名称</option>
+        <option value="lowest_price">最低价</option>
+        <option value="safe_price">安全价</option>
+        <option value="recent_average_price">近期均价</option>
+        <option value="sell_num">在售数量</option>
+        <option value="fetched_at">抓取时间</option>
+        <option value="platform_price">选定平台价</option>
       </select>
     </div>
     <div>
-      <label>方向</label>
-      <select id="sort-dir">
-        <option value="asc" selected>升序</option>
-        <option value="desc">降序</option>
-      </select>
-    </div>
-    <div>
-      <label>显示条数</label>
-      <select id="limit">
-        <option value="100">100</option>
-        <option value="200" selected>200</option>
-        <option value="500">500</option>
-      </select>
+      <label>方向 / 条数</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+        <select id="sort-dir">
+          <option value="asc" selected>升序</option>
+          <option value="desc">降序</option>
+        </select>
+        <select id="limit">
+          <option value="100">100</option>
+          <option value="200" selected>200</option>
+          <option value="500">500</option>
+        </select>
+      </div>
     </div>
     <div>
       <label>自动刷新</label>
@@ -102,74 +94,75 @@
       </select>
     </div>
     <div>
-      <label>刷新</label>
-      <button id="btn-refresh">加载价格</button>
+      <label>操作</label>
+      <button id="btn-refresh">刷新价格</button>
     </div>
   </div>
+  <div class="footer-note" id="live-status">自动刷新已关闭</div>
 </div>
 
-<div class="footer-note" id="live-status">自动刷新已关闭</div>
-
-<div class="stats" id="stats">
+<div class="stats">
   <div class="stat"><div class="label">展示行数</div><div class="value" id="stat-rows">-</div></div>
-  <div class="stat"><div class="label">安全价非零条目</div><div class="value" id="stat-priced">-</div></div>
-  <div class="stat"><div class="label">当前最低安全价</div><div class="value" id="stat-min-price">-</div></div>
-  <div class="stat"><div class="label">当前最高安全价</div><div class="value" id="stat-max-price">-</div></div>
+  <div class="stat"><div class="label">有价条目</div><div class="value good" id="stat-priced">-</div></div>
+  <div class="stat"><div class="label">最低安全价</div><div class="value" id="stat-min-price">-</div></div>
+  <div class="stat"><div class="label">最高安全价</div><div class="value" id="stat-max-price">-</div></div>
 </div>
 
 <div class="card">
-  <div class="toolbar">
-    <div>
-      <label>抓取指定枪名（可选，多行或逗号分隔）</label>
-      <textarea id="crawl-items" placeholder="留空表示按整个静态饰品库持续抓价"></textarea>
+  <details id="crawl-panel">
+    <summary>▸ 后台抓价任务（点击展开）</summary>
+    <div style="margin-top:14px;">
+      <div class="toolbar wide">
+        <div>
+          <label>抓取枪名（可选）</label>
+          <textarea id="crawl-items" placeholder="留空按整个静态库持续抓价，多行或逗号分隔"></textarea>
+        </div>
+        <div>
+          <label>最多抓取条数</label>
+          <input id="crawl-max-items" type="number" min="1" placeholder="不限" />
+        </div>
+        <div>
+          <label>休眠秒数（最小 / 最大）</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+            <input id="crawl-sleep-min" type="number" step="0.1" value="0.8" />
+            <input id="crawl-sleep-max" type="number" step="0.1" value="1.8" />
+          </div>
+        </div>
+        <div>
+          <label>跳过最近缓存（秒）</label>
+          <input id="crawl-skip-recent" type="number" min="0" value="21600" />
+        </div>
+        <div>
+          <label>批次大小</label>
+          <input id="crawl-batch-size" type="number" min="1" value="20" />
+        </div>
+        <div>
+          <label>批次冷却（最小 / 最大秒）</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+            <input id="crawl-batch-cooldown-min" type="number" step="0.1" value="6" />
+            <input id="crawl-batch-cooldown-max" type="number" step="0.1" value="12" />
+          </div>
+        </div>
+        <div>
+          <label>失败重试 / 退避秒数</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+            <input id="crawl-retry-attempts" type="number" min="0" value="2" />
+            <input id="crawl-failure-backoff" type="number" step="0.1" value="8" />
+          </div>
+        </div>
+        <div>
+          <label>发起任务</label>
+          <button id="btn-crawl" class="warn">开始抓价写库</button>
+        </div>
+      </div>
+      <div class="footer-note" style="margin-top:10px;">抓取结果会持续写入 <code>data/steamdt_prices.sqlite</code>，在后台运行，不影响页面浏览。</div>
     </div>
-    <div>
-      <label>最多抓取条数</label>
-      <input id="crawl-max-items" type="number" min="1" placeholder="留空表示不限制" />
-    </div>
-    <div>
-      <label>最小休眠秒数</label>
-      <input id="crawl-sleep-min" type="number" step="0.1" value="0.8" />
-    </div>
-    <div>
-      <label>最大休眠秒数</label>
-      <input id="crawl-sleep-max" type="number" step="0.1" value="1.8" />
-    </div>
-    <div>
-      <label>跳过最近缓存（秒）</label>
-      <input id="crawl-skip-recent" type="number" min="0" value="21600" />
-    </div>
-    <div>
-      <label>批次大小</label>
-      <input id="crawl-batch-size" type="number" min="1" value="20" />
-    </div>
-    <div>
-      <label>批次冷却最小秒数</label>
-      <input id="crawl-batch-cooldown-min" type="number" step="0.1" value="6" />
-    </div>
-    <div>
-      <label>批次冷却最大秒数</label>
-      <input id="crawl-batch-cooldown-max" type="number" step="0.1" value="12" />
-    </div>
-    <div>
-      <label>失败重试次数</label>
-      <input id="crawl-retry-attempts" type="number" min="0" value="2" />
-    </div>
-    <div>
-      <label>失败退避基准秒数</label>
-      <input id="crawl-failure-backoff" type="number" step="0.1" value="8" />
-    </div>
-    <div>
-      <label>后台任务</label>
-      <button id="btn-crawl" class="warn">开始抓价写库</button>
-    </div>
-  </div>
-  <div class="footer-note">这个任务会持续把抓到的价格快照写入 `data/steamdt_prices.sqlite`。</div>
+  </details>
 </div>
 
 <div class="card">
-  <h3 style="margin-top:0;">最近后台任务</h3>
-  <div class="job-list" id="jobs"></div>
+  <div class="section-title">最近后台任务</div>
+  <div class="job-list" id="jobs"><div class="muted">暂无后台任务</div></div>
 </div>
 
 <div class="card">
@@ -177,15 +170,13 @@
     <table>
       <thead>
         <tr>
-          <th>枪械</th>
-          <th>版本</th>
-          <th>外观</th>
+          <th>枪械 / 版本 / 外观</th>
           <th>系列 / 稀有度</th>
           <th>最低价</th>
           <th>安全价</th>
           <th>风控</th>
           <th>近期均价</th>
-          <th>平台价格</th>
+          <th>各平台价格</th>
           <th>在售</th>
           <th>抓取时间</th>
         </tr>
@@ -204,33 +195,38 @@
 
   function fmtPrice(value) {
     if (value === null || value === undefined || Number(value) === 0) return '-';
-    return Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    return '¥' + Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
   }
 
-  async function fetchJsonNoCache(url, options = {}) {
+  function fmtDate(value) {
+    if (!value) return '-';
+    return String(value).replace('T', ' ').slice(0, 16);
+  }
+
+  async function fetchJson(url, options = {}) {
     const response = await fetch(url, {
       cache: 'no-store',
       ...options,
-      headers: {
-        'Cache-Control': 'no-cache',
-        ...(options.headers || {}),
-      },
+      headers: { 'Cache-Control': 'no-cache', ...(options.headers || {}) },
     });
     return response.json();
   }
 
   function updateLiveStatus(message = '') {
     const interval = Number(document.getElementById('auto-refresh').value || 0);
-    const mode = interval > 0 ? `自动刷新：${interval / 1000} 秒` : '自动刷新已关闭';
-    const suffix = message ? ` / ${message}` : '';
-    liveStatusEl.textContent = `${mode}${suffix}`;
+    const mode = interval > 0 ? `自动刷新 ${interval / 1000}s` : '自动刷新已关闭';
+    liveStatusEl.textContent = message ? `${mode} · ${message}` : mode;
   }
 
   function splitItemNames(raw) {
-    return raw
-      .split(/\n|,/g)
-      .map((v) => v.trim())
-      .filter(Boolean);
+    return raw.split(/\n|,/g).map((v) => v.trim()).filter(Boolean);
+  }
+
+  function riskChip(row) {
+    if (!row.is_valid) return '<span class="chip red">不可用</span>';
+    if (row.risk_level === 'high') return '<span class="chip yellow">风险高</span>';
+    if (row.risk_level === 'medium') return '<span class="chip yellow">风险中</span>';
+    return '<span class="chip green">正常</span>';
   }
 
   async function loadPrices() {
@@ -251,9 +247,9 @@
       limit: document.getElementById('limit').value,
     });
     try {
-      const data = await fetchJsonNoCache(`/api/prices?${params.toString()}`);
+      const data = await fetchJson(`/api/prices?${params}`);
       renderPrices(data.rows || []);
-      updateLiveStatus(`上次刷新：${new Date().toLocaleTimeString('zh-CN')}`);
+      updateLiveStatus(`上次刷新 ${new Date().toLocaleTimeString('zh-CN')}`);
     } finally {
       pricesRefreshInFlight = false;
     }
@@ -262,67 +258,65 @@
   function renderPrices(rows) {
     const html = rows.map((row) => {
       const safePrice = row.safe_price ?? row.lowest_price;
-      const riskFlags = (row.anomaly_flags || []).join(', ');
-      const riskClass = row.is_valid ? (row.risk_level === 'high' ? 'warn-text' : 'muted') : 'danger-text';
-      const riskText = row.is_valid
-        ? (row.risk_level ? `风险：${row.risk_level}` : '正常')
-        : '不可用';
       const platforms = (row.platform_prices || [])
-        .filter((entry) => entry.price !== null && entry.price !== undefined)
-        .map((entry) => `<div>${entry.platform_name}: <span class="good">${fmtPrice(entry.price)}</span></div>`)
-        .join('') || '<span class="muted">-</span>';
+        .filter((e) => e.price)
+        .map((e) => `<div><span class="muted-sm">${e.platform_name}</span> <span class="good">${fmtPrice(e.price)}</span></div>`)
+        .join('') || '<span class="muted">—</span>';
+      const variantLabel = row.variant === 'StatTrak' ? '<span class="chip yellow" style="margin-left:4px;">ST</span>' : '';
+      const exteriorLabel = row.exterior_zh ? `<span class="chip">${row.exterior_zh}</span>` : '';
       return `
         <tr>
           <td>
-            <div>${row.base_item_name_zh}</div>
-            <div class="muted mono">${row.base_item_name}</div>
+            <div style="font-weight:600;">${row.base_item_name_zh}${variantLabel}</div>
+            <div class="muted-sm mono" style="margin-top:2px;">${row.base_item_name}</div>
+            <div style="margin-top:4px;">${exteriorLabel}</div>
           </td>
-          <td>${row.variant_zh}</td>
-          <td>${row.exterior_zh || '-'}</td>
           <td>
             <div>${row.collection_zh}</div>
-            <div class="muted">${row.rarity_name_zh}</div>
+            <div class="muted-sm">${row.rarity_name_zh}</div>
           </td>
           <td class="good">${fmtPrice(row.lowest_price)}</td>
           <td class="${row.is_valid ? 'good' : 'danger-text'}">${fmtPrice(safePrice)}</td>
-          <td>
-            <div class="${riskClass}">${riskText}</div>
-            <div class="muted">${riskFlags || '-'}</div>
-          </td>
+          <td>${riskChip(row)}</td>
           <td>${fmtPrice(row.recent_average_price)}</td>
           <td>${platforms}</td>
-          <td>${row.sell_num ?? '-'}</td>
-          <td class="muted">${row.fetched_at || '-'}</td>
-        </tr>
-      `;
+          <td class="muted">${row.sell_num ?? '-'}</td>
+          <td class="muted-sm">${fmtDate(row.fetched_at)}</td>
+        </tr>`;
     }).join('');
-    rowsEl.innerHTML = html || '<tr><td colspan="11" style="text-align:center;" class="muted">暂无价格数据</td></tr>';
+    rowsEl.innerHTML = html || '<tr><td colspan="9" class="muted" style="text-align:center;padding:24px;">暂无价格数据</td></tr>';
 
-    const priced = rows.filter((row) => Number((row.safe_price ?? row.lowest_price) || 0) > 0);
+    const priced = rows.filter((r) => Number((r.safe_price ?? r.lowest_price) || 0) > 0);
     document.getElementById('stat-rows').textContent = rows.length;
     document.getElementById('stat-priced').textContent = priced.length;
-    document.getElementById('stat-min-price').textContent = priced.length ? fmtPrice(Math.min(...priced.map((row) => Number(row.safe_price ?? row.lowest_price)))) : '-';
-    document.getElementById('stat-max-price').textContent = priced.length ? fmtPrice(Math.max(...priced.map((row) => Number(row.safe_price ?? row.lowest_price)))) : '-';
+    document.getElementById('stat-min-price').textContent = priced.length
+      ? fmtPrice(Math.min(...priced.map((r) => Number(r.safe_price ?? r.lowest_price)))) : '-';
+    document.getElementById('stat-max-price').textContent = priced.length
+      ? fmtPrice(Math.max(...priced.map((r) => Number(r.safe_price ?? r.lowest_price)))) : '-';
   }
 
   async function loadJobs() {
-    const data = await fetchJsonNoCache('/api/tasks?limit=8');
+    const data = await fetchJson('/api/tasks?limit=8');
     const rows = data.rows || [];
     jobsEl.innerHTML = rows.map((job) => {
       const total = Number(job.progress_total || 0);
       const current = Number(job.progress_current || 0);
-      const percent = total > 0 ? Math.max(0, Math.min(100, (current / total) * 100)) : 0;
+      const percent = total > 0 ? Math.min(100, (current / total) * 100) : 0;
+      const statusChip = job.status === 'completed'
+        ? '<span class="chip green">完成</span>'
+        : job.status === 'failed'
+        ? '<span class="chip red">失败</span>'
+        : '<span class="chip blue">运行中</span>';
       return `
         <div class="job-item">
-          <div><strong>${job.title}</strong> <span class="chip">${job.status}</span></div>
-          <div class="muted">任务类型：${job.job_type} / ID：${job.id}</div>
-          <div class="muted">${job.progress_message || ''}</div>
-          <div class="muted">进度：${current}/${total || '-'}</div>
-          <div class="progress-bar"><span style="width:${percent}%;"></span></div>
-          ${job.result ? `<details><summary>查看结果</summary><pre class="mono">${JSON.stringify(job.result, null, 2)}</pre></details>` : ''}
-          ${job.error_message ? `<div class="danger-text">失败：${job.error_message}</div>` : ''}
-        </div>
-      `;
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <strong>${job.title}</strong>${statusChip}
+          </div>
+          <div class="muted-sm" style="margin-top:4px;">${job.progress_message || ''}</div>
+          <div class="progress-bar"><span style="width:${percent.toFixed(1)}%;"></span></div>
+          <div class="muted-sm" style="margin-top:4px;">进度 ${current} / ${total || '-'}</div>
+          ${job.error_message ? `<div class="danger-text" style="margin-top:4px;">失败：${job.error_message}</div>` : ''}
+        </div>`;
     }).join('') || '<div class="muted">暂无后台任务</div>';
   }
 
@@ -345,17 +339,16 @@
       body: JSON.stringify(payload),
       cache: 'no-store',
     });
-    await refreshPricesDashboard();
+    await refresh();
   }
 
   async function loadMeta() {
-    const data = await fetchJsonNoCache('/api/meta/options');
-    const map = [
+    const data = await fetchJson('/api/meta/options');
+    for (const [id, rows] of [
       ['collection', data.collections || []],
       ['rarity-name', data.rarities || []],
       ['platform', data.platforms || []],
-    ];
-    for (const [id, rows] of map) {
+    ]) {
       const el = document.getElementById(id);
       const first = el.querySelector('option');
       el.innerHTML = first ? first.outerHTML : '<option value="">全部</option>';
@@ -368,40 +361,30 @@
     }
   }
 
-  async function refreshPricesDashboard() {
+  async function refresh() {
     await Promise.all([loadPrices(), loadJobs()]);
   }
 
-  function syncPricesAutoRefresh() {
-    if (pricesRefreshTimer) {
-      clearInterval(pricesRefreshTimer);
-      pricesRefreshTimer = null;
-    }
+  function syncAutoRefresh() {
+    if (pricesRefreshTimer) { clearInterval(pricesRefreshTimer); pricesRefreshTimer = null; }
     const interval = Number(document.getElementById('auto-refresh').value || 0);
     updateLiveStatus();
     if (interval > 0) {
-      pricesRefreshTimer = setInterval(() => {
-        if (!document.hidden) {
-          refreshPricesDashboard();
-        }
-      }, interval);
+      pricesRefreshTimer = setInterval(() => { if (!document.hidden) refresh(); }, interval);
     }
   }
 
-  document.getElementById('btn-refresh').addEventListener('click', refreshPricesDashboard);
+  document.getElementById('btn-refresh').addEventListener('click', refresh);
   document.getElementById('btn-crawl').addEventListener('click', startCrawl);
-  document.getElementById('auto-refresh').addEventListener('change', syncPricesAutoRefresh);
-  ['search', 'variant', 'exterior', 'collection', 'rarity-name', 'platform', 'min-price', 'max-price', 'has-price-only', 'sort-by', 'sort-dir', 'limit'].forEach((id) => {
-    document.getElementById(id).addEventListener('change', loadPrices);
-    document.getElementById(id).addEventListener('input', loadPrices);
+  document.getElementById('auto-refresh').addEventListener('change', syncAutoRefresh);
+  ['search','variant','exterior','collection','rarity-name','platform','min-price','max-price','has-price-only','sort-by','sort-dir','limit'].forEach((id) => {
+    const el = document.getElementById(id);
+    el.addEventListener('change', loadPrices);
+    if (el.tagName === 'INPUT') el.addEventListener('input', loadPrices);
   });
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) {
-      refreshPricesDashboard();
-    }
-  });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 
-  loadMeta().then(refreshPricesDashboard);
-  syncPricesAutoRefresh();
+  loadMeta().then(refresh);
+  syncAutoRefresh();
 </script>
 {% endblock %}
